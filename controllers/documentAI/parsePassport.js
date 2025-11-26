@@ -3,7 +3,12 @@ import { log } from "console";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+// Import pdf-parse - handle both named and default exports
+const pdfParseModule = require("pdf-parse");
+// Try to get PDFParse class from various possible export formats
+const PDFParse = pdfParseModule.PDFParse ||
+    (pdfParseModule.default && pdfParseModule.default.PDFParse) ||
+    pdfParseModule;
 
 const OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image";
 const SUPPORTED_MIME_TYPES = [
@@ -43,8 +48,11 @@ const formatDate = (dateStr = "") => {
 
 // --- Core Function: Passport Detail Extraction ---
 const extractPassportDetails = (text = "") => {
+    console.log("\n🔍 Starting extraction with text length:", text.length);
+
     const cleanedText = text.replace(/\s+/g, " ").trim();
     const mrzReadyText = text.replace(/\r/g, "").trim();
+    const originalText = text; // Keep original for better matching
 
     const result = {
         number: "",
@@ -62,105 +70,269 @@ const extractPassportDetails = (text = "") => {
         address: "",
     };
 
-    // 1. MRZ Extraction (Highest Reliability)
-    const mrzRegex = /([A-Z0-9<]{30,})\s*\n?([A-Z0-9<]{30,})\s*$/m;
-    const mrzMatch = mrzReadyText.match(mrzRegex);
+    // 1. MRZ Extraction (Highest Reliability) - Multiple patterns
+    console.log("🔍 Looking for MRZ...");
+    const mrzPatterns = [
+        /([A-Z0-9<]{30,})\s*\n?\s*([A-Z0-9<]{30,})\s*$/m,
+        /P<[A-Z]{3}([A-Z0-9<]{30,})\s*\n?\s*([A-Z0-9<]{30,})/m,
+        /([A-Z0-9<]{40,})/g
+    ];
 
-    if (mrzMatch) {
-        const mrzLine1 = mrzMatch[1];
-        const mrzLine2 = mrzMatch[2];
-
-        result.number = mrzLine2.substring(0, 9).replace(/<| /g, "").trim();
-
-        const dobMrz = mrzLine2.substring(13, 19);
-        const expiryMrz = mrzLine2.substring(21, 27);
-
-        if (dobMrz.length === 6) {
-            result.dateOfBirth = formatDate(dobMrz);
-        }
-
-        if (expiryMrz.length === 6) {
-            result.expiryDate = formatDate(expiryMrz);
-        }
-
-        result.sex = mrzLine2.substring(20, 21);
-
-        const mrzNameSections = mrzLine1.substring(5).split("<<").filter(Boolean);
-        if (mrzNameSections.length >= 1) {
-            result.surname = mrzNameSections[0].replace(/<+/g, " ").trim();
-        }
-        if (mrzNameSections.length >= 2) {
-            result.givenNames = mrzNameSections[1].replace(/<+/g, " ").trim();
-        }
+    let mrzMatch = null;
+    for (const pattern of mrzPatterns) {
+        mrzMatch = mrzReadyText.match(pattern);
+        if (mrzMatch && mrzMatch.length >= 2) break;
     }
 
-    // 2. Standard Regex Extraction for remaining fields
+    if (mrzMatch && mrzMatch.length >= 2) {
+        console.log("✅ MRZ Found!");
+        const mrzLine1 = mrzMatch[1] || "";
+        const mrzLine2 = mrzMatch[2] || "";
+        console.log("   MRZ Line 1:", mrzLine1.substring(0, 50));
+        console.log("   MRZ Line 2:", mrzLine2.substring(0, 50));
+
+        if (mrzLine2.length >= 9) {
+            result.number = mrzLine2.substring(0, 9).replace(/<| /g, "").trim();
+            console.log("   Extracted Passport # from MRZ:", result.number);
+        }
+
+        if (mrzLine2.length >= 27) {
+            const dobMrz = mrzLine2.substring(13, 19);
+            const expiryMrz = mrzLine2.substring(21, 27);
+
+            if (dobMrz.length === 6 && !dobMrz.includes("<")) {
+                result.dateOfBirth = formatDate(dobMrz);
+                console.log("   Extracted DOB from MRZ:", dobMrz, "->", result.dateOfBirth);
+            }
+
+            if (expiryMrz.length === 6 && !expiryMrz.includes("<")) {
+                result.expiryDate = formatDate(expiryMrz);
+                console.log("   Extracted Expiry from MRZ:", expiryMrz, "->", result.expiryDate);
+            }
+
+            if (mrzLine2.length > 20) {
+                result.sex = mrzLine2.substring(20, 21);
+                console.log("   Extracted Sex from MRZ:", result.sex);
+            }
+        }
+
+        if (mrzLine1.length > 5) {
+            const mrzNameSections = mrzLine1.substring(5).split("<<").filter(Boolean);
+            if (mrzNameSections.length >= 1) {
+                result.surname = mrzNameSections[0].replace(/<+/g, " ").trim();
+                console.log("   Extracted Surname from MRZ:", result.surname);
+            }
+            if (mrzNameSections.length >= 2) {
+                result.givenNames = mrzNameSections[1].replace(/<+/g, " ").trim();
+                console.log("   Extracted Given Names from MRZ:", result.givenNames);
+            }
+        }
+    } else {
+        console.log("❌ No MRZ found");
+    }
+
+    // 2. Passport Number - Multiple patterns
+    console.log("\n🔍 Looking for Passport Number...");
     if (!result.number) {
-        const numberRegex = /(Passport\s*(?:No\.?|Number)?[:\s]*)([A-Z0-9<]{6,})/i;
-        const numberMatch = cleanedText.match(numberRegex);
-        if (numberMatch) {
-            result.number = numberMatch[2].replace(/[^A-Z0-9]/gi, "");
-        } else {
-            const fallbackNumber = cleanedText.match(/([A-Z]{1,2}\d{6,})/);
-            if (fallbackNumber) {
-                result.number = fallbackNumber[1];
+        const numberPatterns = [
+            /(?:पासपोर्ट\s*न\.|Passport\s*(?:No\.?|Number|No)[:\s]*)([A-Z0-9]{6,12})/i,
+            /Passport\s*No[.:\s]*([A-Z]{1,2}\d{6,9})/i,
+            /([A-Z]{2}\d{6,9})/,
+            /([A-Z]{1,2}\d{6,})/,
+            /AF\d{6,}/i
+        ];
+
+        for (const pattern of numberPatterns) {
+            const match = originalText.match(pattern);
+            if (match && match[1] && match[1].length >= 7) {
+                result.number = match[1].replace(/[^A-Z0-9]/gi, "").trim();
+                console.log("   ✅ Found Passport #:", result.number, "using pattern:", pattern.toString().substring(0, 50));
+                break;
             }
         }
     }
 
-    const nationalityRegex = /(INDIAN|IND)/i;
-    const nationalityMatch = cleanedText.match(nationalityRegex);
-    if (nationalityMatch) {
-        result.nationality = "INDIAN";
-    }
-
-    const placeRegex = /Place\s*of\s*Issue\s*[:\-]?\s*([A-Z\s]+)/i;
-    const placeMatch = cleanedText.match(placeRegex);
-    if (placeMatch) {
-        result.placeOfIssue = placeMatch[1].trim().split(/\s{2,}/)[0];
-    }
-
-    const issueDateRegex = /Date\s*of\s*Issue\s*[:\-]?\s*([0-9]{1,2}[.\-/][0-9]{1,2}[.\-/][0-9]{2,4})/i;
-    const issueMatch = cleanedText.match(issueDateRegex);
-    if (issueMatch) {
-        result.issueDate = formatDate(issueMatch[1]);
-    }
-
-    if (!result.expiryDate) {
-        const expiryDateRegex = /Date\s*of\s*Expiry\s*[:\-]?\s*([0-9]{1,2}[.\-/][0-9]{1,2}[.\-/][0-9]{2,4})/i;
-        const expiryMatch = cleanedText.match(expiryDateRegex);
-        if (expiryMatch) {
-            result.expiryDate = formatDate(expiryMatch[1]);
+    // 3. Nationality - Multiple patterns
+    console.log("\n🔍 Looking for Nationality...");
+    const nationalityPatterns = [
+        /(?:राष्ट्रीयता|Nationality)[:\s]*([A-Z]+)/i,
+        /(INDIAN|IND)/i,
+        /भारतीय/i
+    ];
+    for (const pattern of nationalityPatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.nationality = match[1] || "INDIAN";
+            console.log("   ✅ Found Nationality:", result.nationality);
+            break;
         }
     }
 
-    const fatherRegex = /Name\s*of\s*Father\/Legal\s*Guardian\s*([A-Z\s]+)/i;
-    const fatherMatch = cleanedText.match(fatherRegex);
-    if (fatherMatch) {
-        result.fatherName = fatherMatch[1].trim();
+    // 4. Place of Issue - Multiple patterns
+    console.log("\n🔍 Looking for Place of Issue...");
+    const placePatterns = [
+        /(?:जारी\s*करने\s*का\s*स्थान|Place\s*of\s*Issue)[:\s]*([A-Z][A-Z\s]{2,30})/i,
+        /(COCHIN|MUMBAI|DELHI|KOLKATA|CHENNAI|BANGALORE|HYDERABAD|PUNE|AHMEDABAD)/i
+    ];
+    for (const pattern of placePatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.placeOfIssue = (match[1] || match[0]).trim();
+            console.log("   ✅ Found Place of Issue:", result.placeOfIssue);
+            break;
+        }
     }
 
-    const motherRegex = /Name\s*of\s*Mother\s*([A-Z\s]+)/i;
-    const motherMatch = cleanedText.match(motherRegex);
-    if (motherMatch) {
-        result.motherName = motherMatch[1].trim();
+    // 5. Issue Date - Multiple patterns
+    console.log("\n🔍 Looking for Issue Date...");
+    const issueDatePatterns = [
+        /(?:जारी\s*करने\s*की\s*तिथि|Date\s*of\s*Issue)[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+        /Issue[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+        /(\d{2}\/\d{2}\/\d{4})/g
+    ];
+    for (const pattern of issueDatePatterns) {
+        const matches = originalText.match(pattern);
+        if (matches) {
+            const dateStr = matches[1] || matches[0];
+            const formatted = formatDate(dateStr);
+            if (formatted) {
+                result.issueDate = formatted;
+                console.log("   ✅ Found Issue Date:", dateStr, "->", formatted);
+                break;
+            }
+        }
     }
 
-    const spouseRegex = /Name\s*of\s*Spouse\s*([A-Z\s]+)/i;
-    const spouseMatch = cleanedText.match(spouseRegex);
-    if (spouseMatch) {
-        result.spouseName = spouseMatch[1].trim();
+    // 6. Expiry Date - Multiple patterns
+    console.log("\n🔍 Looking for Expiry Date...");
+    if (!result.expiryDate) {
+        const expiryDatePatterns = [
+            /(?:समाप्ति\s*की\s*तिथि|Date\s*of\s*Expiry)[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+            /Expiry[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+            /(\d{2}\/\d{2}\/\d{4})/g
+        ];
+        for (const pattern of expiryDatePatterns) {
+            const matches = originalText.match(pattern);
+            if (matches) {
+                // Try to get the last date (usually expiry comes after issue)
+                const dateStr = Array.isArray(matches) ? matches[matches.length - 1] : (matches[1] || matches[0]);
+                const formatted = formatDate(dateStr);
+                if (formatted) {
+                    result.expiryDate = formatted;
+                    console.log("   ✅ Found Expiry Date:", dateStr, "->", formatted);
+                    break;
+                }
+            }
+        }
     }
 
-    const addressRegex = /Address\s*([A-Z0-9\s,.:\/-]+?)\s*(?:File\s*No|Passport\s*No)/i;
-    const addressMatch = cleanedText.match(addressRegex);
-    if (addressMatch) {
-        result.address = addressMatch[1]
-            .replace(/\s{2,}/g, " ")
-            .replace(/\s+,/g, ",")
-            .trim();
+    // 7. Date of Birth - Multiple patterns
+    console.log("\n🔍 Looking for Date of Birth...");
+    if (!result.dateOfBirth) {
+        const dobPatterns = [
+            /(?:जन्मतिथि|Date\s*of\s*Birth)[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+            /DOB[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i,
+            /Birth[:\s]*(\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4})/i
+        ];
+        for (const pattern of dobPatterns) {
+            const match = originalText.match(pattern);
+            if (match) {
+                const formatted = formatDate(match[1] || match[0]);
+                if (formatted) {
+                    result.dateOfBirth = formatted;
+                    console.log("   ✅ Found DOB:", match[1] || match[0], "->", formatted);
+                    break;
+                }
+            }
+        }
     }
 
+    // 8. Names - Surname and Given Names
+    console.log("\n🔍 Looking for Names...");
+    if (!result.surname || !result.givenNames) {
+        const namePatterns = [
+            /(?:उपनाम|Surname)[:\s]*([A-Z\s]{2,50})/i,
+            /(?:दिया\s*गया\s*नाम|Given\s*Name)[:\s]*([A-Z\s]{2,50})/i
+        ];
+        for (const pattern of namePatterns) {
+            const match = originalText.match(pattern);
+            if (match) {
+                const name = match[1].trim();
+                if (pattern.toString().includes("Surname") && !result.surname) {
+                    result.surname = name;
+                    console.log("   ✅ Found Surname:", result.surname);
+                } else if (pattern.toString().includes("Given") && !result.givenNames) {
+                    result.givenNames = name;
+                    console.log("   ✅ Found Given Names:", result.givenNames);
+                }
+            }
+        }
+    }
+
+    // 9. Father's Name
+    console.log("\n🔍 Looking for Father's Name...");
+    const fatherPatterns = [
+        /(?:पिता|Name\s*of\s*Father)[:\s\/]*([A-Z\s]{3,50})/i,
+        /Father[:\s]*([A-Z\s]{3,50})/i
+    ];
+    for (const pattern of fatherPatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.fatherName = match[1].trim().split(/\s{2,}/)[0];
+            console.log("   ✅ Found Father's Name:", result.fatherName);
+            break;
+        }
+    }
+
+    // 10. Mother's Name
+    console.log("\n🔍 Looking for Mother's Name...");
+    const motherPatterns = [
+        /(?:माता|Name\s*of\s*Mother)[:\s]*([A-Z\s]{3,50})/i,
+        /Mother[:\s]*([A-Z\s]{3,50})/i
+    ];
+    for (const pattern of motherPatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.motherName = match[1].trim().split(/\s{2,}/)[0];
+            console.log("   ✅ Found Mother's Name:", result.motherName);
+            break;
+        }
+    }
+
+    // 11. Spouse Name
+    console.log("\n🔍 Looking for Spouse Name...");
+    const spousePatterns = [
+        /(?:पति|पत्नी|Name\s*of\s*Spouse)[:\s]*([A-Z\s]{3,50})/i,
+        /Spouse[:\s]*([A-Z\s]{3,50})/i
+    ];
+    for (const pattern of spousePatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.spouseName = match[1].trim().split(/\s{2,}/)[0];
+            console.log("   ✅ Found Spouse Name:", result.spouseName);
+            break;
+        }
+    }
+
+    // 12. Address
+    console.log("\n🔍 Looking for Address...");
+    const addressPatterns = [
+        /(?:पता|Address)[:\s]*([A-Z0-9\s,.:\/-]{10,200}?)(?:\s*(?:File|Passport|PIN|PIN:))/i,
+        /Address[:\s]*([A-Z0-9\s,.:\/-]{10,200})/i
+    ];
+    for (const pattern of addressPatterns) {
+        const match = originalText.match(pattern);
+        if (match) {
+            result.address = match[1]
+                .replace(/\s{2,}/g, " ")
+                .replace(/\s+,/g, ",")
+                .trim();
+            console.log("   ✅ Found Address:", result.address.substring(0, 50));
+            break;
+        }
+    }
+
+    console.log("\n✅ Extraction complete!");
     return result;
 };
 
@@ -207,11 +379,21 @@ const callOcrSpace = async (fileBuffer, mimeType = "application/octet-stream") =
 
 // --- Controller Function ---
 export const parsePassport = async (req, res) => {
-    console.log("halooooooooooooooooo");
+    console.log("hyyy");
+
+    console.log("==========================================");
+    console.log("📄 PASSPORT PARSING REQUEST RECEIVED");
+    console.log("==========================================");
 
     if (!req.file) {
         return res.status(400).json({ message: "Passport file is required." });
     }
+
+    console.log("📋 File Information:");
+    console.log("   - Original Name:", req.file.originalname);
+    console.log("   - MIME Type:", req.file.mimetype);
+    console.log("   - File Size:", req.file.size, "bytes");
+    console.log("   - Buffer Length:", req.file.buffer?.length || 0, "bytes");
 
     const mimeType = req.file.mimetype || "";
     const isSupported = SUPPORTED_MIME_TYPES.some((type) =>
@@ -230,30 +412,83 @@ export const parsePassport = async (req, res) => {
         let text = "";
 
         if (isPdfFile(req.file)) {
-            const parsedPdf = await pdfParse(req.file.buffer);
-            text = parsedPdf.text || "";
-            sourcesUsed.push("pdf-parse");
+            console.log("\n🔍 Attempting PDF text extraction...");
+            try {
+                const parser = new PDFParse({ data: req.file.buffer });
+                const result = await parser.getText();
+                text = result?.text || "";
+
+                console.log("✅ PDF Text Extraction Successful!");
+                console.log("   - Text Length:", text.length, "characters");
+                console.log("   - First 500 characters:");
+                console.log("   " + text.substring(0, 500).replace(/\n/g, "\\n"));
+                if (text.length > 500) {
+                    console.log("   ... (truncated)");
+                }
+
+                sourcesUsed.push("pdf-parse");
+            } catch (pdfError) {
+                console.error("❌ PDF parsing error:", pdfError);
+                warnings.push("Failed to parse PDF text. Attempting OCR fallback.");
+            }
         }
 
         if (!text.trim() || text.trim().length < MIN_TEXT_LENGTH_FOR_PARSER) {
+            console.log("\n🔍 Text too short or empty, attempting OCR...");
             const { text: ocrText, warning } = await callOcrSpace(req.file.buffer, mimeType);
             if (warning) {
                 warnings.push(warning);
+                console.log("⚠️  OCR Warning:", warning);
             }
             if (ocrText) {
                 text = `${text}\n${ocrText}`.trim();
+                console.log("✅ OCR Text Extraction Successful!");
+                console.log("   - OCR Text Length:", ocrText.length, "characters");
+                console.log("   - Combined Text Length:", text.length, "characters");
                 sourcesUsed.push("ocr-space");
             }
         }
 
         if (!text.trim()) {
+            console.log("\n❌ No text extracted from document");
             return res.status(422).json({
                 message: "Unable to extract text from the document. Please upload a clearer scan or configure OCR.",
                 warnings,
             });
         }
 
+        console.log("\n📝 Full Extracted Text:");
+        console.log("==========================================");
+        console.log(text);
+        console.log("==========================================");
+        console.log("   Total Length:", text.length, "characters");
+
+        console.log("\n🔍 Extracting passport details from text...");
         const details = extractPassportDetails(text);
+
+        console.log("\n✅ Extracted Passport Details:");
+        console.log("==========================================");
+        console.log("   Passport Number:", details.number);
+        console.log("   Nationality:", details.nationality || "NOT FOUND");
+        console.log("   Date of Birth:", details.dateOfBirth || "NOT FOUND");
+        console.log("   Issue Date:", details.issueDate || "NOT FOUND");
+        console.log("   Expiry Date:", details.expiryDate || "NOT FOUND");
+        console.log("   Place of Issue:", details.placeOfIssue || "NOT FOUND");
+        console.log("   Sex:", details.sex || "NOT FOUND");
+        console.log("   Surname:", details.surname || "NOT FOUND");
+        console.log("   Given Names:", details.givenNames || "NOT FOUND");
+        console.log("   Father's Name:", details.fatherName || "NOT FOUND");
+        console.log("   Mother's Name:", details.motherName || "NOT FOUND");
+        console.log("   Spouse Name:", details.spouseName || "NOT FOUND");
+        console.log("   Address:", details.address || "NOT FOUND");
+        console.log("==========================================");
+        console.log("\n📤 Sending response to client...");
+        console.log("   Sources Used:", sourcesUsed.join(", "));
+        if (warnings.length > 0) {
+            console.log("   Warnings:", warnings.join(", "));
+        }
+        console.log("==========================================\n");
+
         return res.json({
             status: "success",
             data: details,

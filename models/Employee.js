@@ -30,6 +30,11 @@ const employeeSchema = new mongoose.Schema(
             enum: ["Probation", "Permanent", "Temporary", "Notice"],
             default: "Probation",
         },
+        probationPeriod: {
+            type: Number,
+            enum: [1, 2, 3, 4, 5, 6],
+            default: null,
+        },
 
         // LOGIN & ACCESS
         email: { type: String, required: true, unique: true },
@@ -63,6 +68,21 @@ const employeeSchema = new mongoose.Schema(
         passportExp: { type: Date },
         eidExp: { type: Date },
         medExp: { type: Date },
+
+        // PASSPORT DETAILS
+        passportDetails: {
+            number: { type: String },
+            nationality: { type: String },
+            issueDate: { type: Date },
+            expiryDate: { type: Date },
+            placeOfIssue: { type: String },
+            document: {
+                data: { type: String },
+                name: { type: String },
+                mimeType: { type: String },
+            },
+            lastUpdated: { type: Date },
+        },
 
         // VISA DETAILS
         visaDetails: {

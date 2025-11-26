@@ -6,12 +6,14 @@ import { addEmployee } from "../controllers/employee/addEmployee.js";
 import { updateBasicDetails } from "../controllers/employee/updateBasicDetails.js";
 import { deleteEmployee } from "../controllers/employee/deleteEmployee.js";
 import { updateVisaDetails } from "../controllers/employee/updateVisaDetails.js";
+import { updatePassportDetails } from "../controllers/employee/updatePassportDetails.js";
 const router = express.Router();
 
 router.get("/", getEmployees);
 router.post("/", addEmployee);
 // Specific routes MUST come before generic :id routes
 router.patch("/basic-details/:id", updateBasicDetails);
+router.patch("/passport/:id", updatePassportDetails);
 router.patch("/visa/:id", updateVisaDetails);
 router.get("/:id", getEmployeeById);
 // router.put("/:id", updateEmployee);

@@ -26,6 +26,7 @@ export const addEmployee = async (req, res) => {
             department,
             designation,
             status,
+            probationPeriod,
 
             // Login & Access
             email,
@@ -138,6 +139,7 @@ export const addEmployee = async (req, res) => {
             department,
             designation,
             status: status || 'Active',
+            probationPeriod: status === 'Probation' ? (probationPeriod || null) : null,
 
             // Login & Access
             email,
