@@ -1,5 +1,21 @@
 import mongoose from "mongoose";
 
+const visaDocumentSchema = new mongoose.Schema(
+    {
+        number: { type: String },
+        issueDate: { type: Date },
+        expiryDate: { type: Date },
+        sponsor: { type: String },
+        document: {
+            data: { type: String },
+            name: { type: String },
+            mimeType: { type: String },
+        },
+        lastUpdated: { type: Date },
+    },
+    { _id: false }
+);
+
 const employeeSchema = new mongoose.Schema(
     {
         // BASIC INFO
@@ -47,6 +63,13 @@ const employeeSchema = new mongoose.Schema(
         passportExp: { type: Date },
         eidExp: { type: Date },
         medExp: { type: Date },
+
+        // VISA DETAILS
+        visaDetails: {
+            visit: { type: visaDocumentSchema, default: undefined },
+            employment: { type: visaDocumentSchema, default: undefined },
+            spouse: { type: visaDocumentSchema, default: undefined },
+        },
 
         // SALARY STRUCTURE
         monthlySalary: { type: Number, default: 0 },

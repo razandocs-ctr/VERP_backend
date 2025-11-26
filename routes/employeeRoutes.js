@@ -5,12 +5,14 @@ import { addEmployee } from "../controllers/employee/addEmployee.js";
 // import { updateEmployee } from "../controllers/employee/updateEmployee.js";
 import { updateBasicDetails } from "../controllers/employee/updateBasicDetails.js";
 import { deleteEmployee } from "../controllers/employee/deleteEmployee.js";
+import { updateVisaDetails } from "../controllers/employee/updateVisaDetails.js";
 const router = express.Router();
 
 router.get("/", getEmployees);
 router.post("/", addEmployee);
 // Specific routes MUST come before generic :id routes
 router.patch("/basic-details/:id", updateBasicDetails);
+router.patch("/visa/:id", updateVisaDetails);
 router.get("/:id", getEmployeeById);
 // router.put("/:id", updateEmployee);
 router.delete("/:id", deleteEmployee);
