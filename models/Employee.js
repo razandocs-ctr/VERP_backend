@@ -35,6 +35,17 @@ const employeeSchema = new mongoose.Schema(
             enum: [1, 2, 3, 4, 5, 6],
             default: null,
         },
+        reportingAuthority: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null },
+        profileApprovalStatus: {
+            type: String,
+            enum: ["draft", "submitted", "active"],
+            default: "draft"
+        },
+        profileStatus: {
+            type: String,
+            enum: ["active", "inactive"],
+            default: "inactive"
+        },
 
         // LOGIN & ACCESS
         email: { type: String, required: true, unique: true },
@@ -52,6 +63,12 @@ const employeeSchema = new mongoose.Schema(
         state: { type: String },
         city: { type: String },
         postalCode: { type: String },
+        currentAddressLine1: { type: String },
+        currentAddressLine2: { type: String },
+        currentCity: { type: String },
+        currentState: { type: String },
+        currentCountry: { type: String },
+        currentPostalCode: { type: String },
 
         // PERSONAL DETAILS
         gender: {
@@ -61,6 +78,7 @@ const employeeSchema = new mongoose.Schema(
         },
         dateOfBirth: { type: Date },
         age: { type: Number },
+        maritalStatus: { type: String },
         nationality: { type: String },
         fathersName: { type: String },
 
@@ -106,6 +124,22 @@ const employeeSchema = new mongoose.Schema(
                 percentage: { type: Number, default: 0 },
             },
         ],
+
+        // BANK DETAILS
+        bankName: { type: String },
+        accountName: { type: String },
+        accountNumber: { type: String },
+        ifscCode: { type: String },
+        bankOtherDetails: { type: String },
+
+        // EMERGENCY CONTACTS
+        emergencyContacts: [
+            {
+                name: { type: String },
+                relation: { type: String, default: 'Self' },
+                number: { type: String }
+            }
+        ]
     },
     { timestamps: true }
 );
