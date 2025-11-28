@@ -19,6 +19,8 @@ export const updateBasicDetails = async (req, res) => {
             "bankName",
             "accountName",
             "accountNumber",
+            "ibanNumber",
+            "swiftCode",
             "ifscCode",
             "bankOtherDetails",
             "addressLine1",
@@ -39,7 +41,12 @@ export const updateBasicDetails = async (req, res) => {
             "gender",
             "emergencyContactName",
             "emergencyContactRelation",
-            "emergencyContactNumber"
+            "emergencyContactNumber",
+            "basic",
+            "houseRentAllowance",
+            "otherAllowance",
+            "additionalAllowances",
+            "salaryHistory"
         ];
 
         // 2. Build updatePayload

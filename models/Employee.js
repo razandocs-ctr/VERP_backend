@@ -36,6 +36,7 @@ const employeeSchema = new mongoose.Schema(
             default: null,
         },
         reportingAuthority: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null },
+        overtime: { type: Boolean, default: false },
         profileApprovalStatus: {
             type: String,
             enum: ["draft", "submitted", "active"],
@@ -129,7 +130,8 @@ const employeeSchema = new mongoose.Schema(
         bankName: { type: String },
         accountName: { type: String },
         accountNumber: { type: String },
-        ifscCode: { type: String },
+        ibanNumber: { type: String },
+        swiftCode: { type: String },
         bankOtherDetails: { type: String },
 
         // EMERGENCY CONTACTS
@@ -138,6 +140,52 @@ const employeeSchema = new mongoose.Schema(
                 name: { type: String },
                 relation: { type: String, default: 'Self' },
                 number: { type: String }
+            }
+        ],
+
+        // EDUCATION DETAILS
+        educationDetails: [
+            {
+                universityOrBoard: { type: String },
+                collegeOrInstitute: { type: String },
+                course: { type: String },
+                fieldOfStudy: { type: String },
+                completedYear: { type: String },
+                certificate: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
+
+        // EXPERIENCE DETAILS
+        experienceDetails: [
+            {
+                company: { type: String },
+                designation: { type: String },
+                startDate: { type: Date },
+                endDate: { type: Date },
+                certificate: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
+
+        // SALARY HISTORY
+        salaryHistory: [
+            {
+                month: { type: String }, // e.g., "January 2024"
+                fromDate: { type: Date },
+                toDate: { type: Date, default: null }, // null for current/active entry
+                basic: { type: Number, default: 0 },
+                houseRentAllowance: { type: Number, default: 0 },
+                otherAllowance: { type: Number, default: 0 },
+                vehicleAllowance: { type: Number, default: 0 },
+                totalSalary: { type: Number, default: 0 },
+                createdAt: { type: Date, default: Date.now }
             }
         ]
     },

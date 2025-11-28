@@ -1,0 +1,58 @@
+import Employee from "../../models/Employee.js";
+
+export const addExperience = async (req, res) => {
+    const { id } = req.params;
+    const { company, designation, startDate, endDate, certificate } = req.body;
+
+    // Validate required fields
+    if (!company || !designation || !startDate) {
+        return res.status(400).json({ 
+            message: "Company, Designation, and Start Date are required" 
+        });
+    }
+
+    // Validate that end date is after start date if both are provided
+    if (endDate && new Date(endDate) < new Date(startDate)) {
+        return res.status(400).json({ 
+            message: "End Date must be after Start Date" 
+        });
+    }
+
+    try {
+        const experienceData = {
+            company: company.trim(),
+            designation: designation.trim(),
+            startDate: new Date(startDate),
+            endDate: endDate ? new Date(endDate) : null,
+            certificate: certificate && certificate.data ? {
+                data: certificate.data,
+                name: certificate.name || '',
+                mimeType: certificate.mimeType || 'application/pdf'
+            } : undefined
+        };
+
+        const updated = await Employee.findByIdAndUpdate(
+            id,
+            {
+                $push: {
+                    experienceDetails: experienceData
+                }
+            },
+            { new: true, runValidators: true }
+        ).select("-password");
+
+        if (!updated) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        return res.status(200).json({
+            message: "Experience details added successfully",
+            experienceDetails: updated.experienceDetails
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: err.message });
+    }
+};
+
+
