@@ -34,3 +34,4 @@ export const deleteEducation = async (req, res) => {
 };
 
 
+
