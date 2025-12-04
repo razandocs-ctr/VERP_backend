@@ -126,6 +126,9 @@ const employeeSchema = new mongoose.Schema(
             },
         ],
 
+        // PROFILE PICTURE
+        profilePicture: { type: String }, // Cloudinary URL
+
         // BANK DETAILS
         bankName: { type: String },
         accountName: { type: String },

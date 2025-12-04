@@ -19,6 +19,8 @@ import { deleteEducation } from "../controllers/employee/deleteEducation.js";
 import { addExperience } from "../controllers/employee/addExperience.js";
 import { updateExperience } from "../controllers/employee/updateExperience.js";
 import { deleteExperience } from "../controllers/employee/deleteExperience.js";
+import { uploadProfilePicture } from "../controllers/employee/uploadProfilePicture.js";
+import { extractPdfText } from "../controllers/employee/extractPdfText.js";
 const router = express.Router();
 
 router.get("/", getEmployees);
@@ -28,6 +30,14 @@ router.patch("/basic-details/:id", updateBasicDetails);
 router.patch("/work-details/:id", updateWorkDetails);
 router.patch("/passport/:id", updatePassportDetails);
 router.patch("/visa/:id", updateVisaDetails);
+// Upload profile picture route (specific route before generic :id routes)
+router.post("/upload-profile-picture/:id", uploadProfilePicture);
+// PDF extraction route (must be before :id routes)
+router.post("/extract-pdf-text", (req, res, next) => {
+    console.log('📄 PDF extraction route matched');
+    extractPdfText(req, res, next);
+});
+// All :id specific routes must come before the generic :id route
 router.post("/:id/emergency-contact", addEmergencyContact);
 router.patch("/:id/emergency-contact/:contactId", updateEmergencyContact);
 router.delete("/:id/emergency-contact/:contactId", deleteEmergencyContact);
@@ -39,6 +49,7 @@ router.patch("/:id/experience/:experienceId", updateExperience);
 router.delete("/:id/experience/:experienceId", deleteExperience);
 router.post("/:id/send-approval-email", sendApprovalEmail);
 router.post("/:id/approve-profile", approveProfile);
+// Generic :id routes must come last
 router.get("/:id", getEmployeeById);
 // router.put("/:id", updateEmployee);
 router.delete("/:id", deleteEmployee);

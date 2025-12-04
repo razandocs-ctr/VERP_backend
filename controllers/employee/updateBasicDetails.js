@@ -46,7 +46,8 @@ export const updateBasicDetails = async (req, res) => {
             "houseRentAllowance",
             "otherAllowance",
             "additionalAllowances",
-            "salaryHistory"
+            "salaryHistory",
+            "profilePicture"
         ];
 
         // 2. Build updatePayload
