@@ -116,6 +116,10 @@ export const addEmployee = async (req, res) => {
             hashedPassword = await bcrypt.hash(password, 10);
         }
 
+        // Normalize status to allowed values; default to Probation if invalid/absent
+        const allowedStatuses = ['Probation', 'Permanent', 'Temporary', 'Notice'];
+        const normalizedStatus = allowedStatuses.includes(status) ? status : 'Probation';
+
         // Use designation as role if role is not provided
         const employeeRole = role || designation || '';
 
@@ -128,7 +132,7 @@ export const addEmployee = async (req, res) => {
             role: employeeRole,
             department,
             designation,
-            status: status || 'Active',
+            status: normalizedStatus,
             probationPeriod: status === 'Probation' ? (probationPeriod || null) : null,
             reportingAuthority: reportingAuthority || null,
             profileApprovalStatus: profileApprovalStatus || 'draft',
