@@ -72,32 +72,19 @@ export const addEmployee = async (req, res) => {
         // Validate required fields
         // Check for empty strings, null, undefined, or whitespace-only strings
         const isEmpty = (val) => !val || (typeof val === 'string' && val.trim() === '');
-        
-        if (isEmpty(firstName) || isEmpty(lastName) || isEmpty(employeeId) || isEmpty(department) || isEmpty(designation) ||
-            isEmpty(dateOfJoining) || isEmpty(email) || isEmpty(contactNumber) || isEmpty(gender)) {
+        // Only keep the minimal must-have fields to align with the simplified form
+        if (isEmpty(firstName) || isEmpty(lastName) || isEmpty(employeeId)) {
             return res.status(400).json({
                 message: "Please fill all required fields (Basic Details)",
                 missingFields: {
                     firstName: isEmpty(firstName),
                     lastName: isEmpty(lastName),
-                    employeeId: isEmpty(employeeId),
-                    department: isEmpty(department),
-                    designation: isEmpty(designation),
-                    dateOfJoining: isEmpty(dateOfJoining),
-                    email: isEmpty(email),
-                    contactNumber: isEmpty(contactNumber),
-                    gender: isEmpty(gender)
+                    employeeId: isEmpty(employeeId)
                 },
                 receivedData: {
                     firstName: firstName || '(empty)',
                     lastName: lastName || '(empty)',
-                    employeeId: employeeId || '(empty)',
-                    department: department || '(empty)',
-                    designation: designation || '(empty)',
-                    dateOfJoining: dateOfJoining || '(empty)',
-                    email: email || '(empty)',
-                    contactNumber: contactNumber || '(empty)',
-                    gender: gender || '(empty)'
+                    employeeId: employeeId || '(empty)'
                 }
             });
         }
