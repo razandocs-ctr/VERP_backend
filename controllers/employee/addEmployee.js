@@ -1,5 +1,11 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import EmployeeContact from "../../models/EmployeeContact.js";
+import EmployeePersonal from "../../models/EmployeePersonal.js";
+import EmployeePassport from "../../models/EmployeePassport.js";
+import EmployeeSalary from "../../models/EmployeeSalary.js";
+import User from "../../models/User.js";
 import bcrypt from "bcryptjs";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 // Calculate age from date of birth
 const calculateAge = (dateOfBirth) => {
@@ -90,31 +96,19 @@ export const addEmployee = async (req, res) => {
         }
 
         // Check if employee ID already exists
-        const existingEmployeeId = await Employee.findOne({ employeeId });
+        const existingEmployeeId = await EmployeeBasic.findOne({ employeeId });
         if (existingEmployeeId) {
             return res.status(400).json({ message: "Employee ID already exists" });
         }
 
         // Check if email already exists
-        const existingEmail = await Employee.findOne({ email });
+        const existingEmail = await EmployeeBasic.findOne({ email });
         if (existingEmail) {
             return res.status(400).json({ message: "Email already exists" });
         }
 
         // Calculate age from date of birth
         const age = calculateAge(dateOfBirth);
-
-        // Hash password if portal access is enabled
-        let hashedPassword = null;
-        if (enablePortalAccess) {
-            const { password } = req.body;
-            if (!password) {
-                return res.status(400).json({
-                    message: "Password is required when Portal Access is enabled"
-                });
-            }
-            hashedPassword = await bcrypt.hash(password, 10);
-        }
 
         // Normalize status to allowed values; default to Probation if invalid/absent
         const allowedStatuses = ['Probation', 'Permanent', 'Temporary', 'Notice'];
@@ -123,62 +117,141 @@ export const addEmployee = async (req, res) => {
         // Use designation as role if role is not provided
         const employeeRole = role || designation || '';
 
-        // Create new employee
-        const newEmployee = new Employee({
-            // Basic Info
-            firstName,
-            lastName,
-            employeeId,
-            role: employeeRole,
-            department,
-            designation,
-            status: normalizedStatus,
-            probationPeriod: status === 'Probation' ? (probationPeriod || null) : null,
-            reportingAuthority: reportingAuthority || null,
-            profileApprovalStatus: profileApprovalStatus || 'draft',
-            profileStatus: profileStatus || 'inactive',
+        // Create records in all collections
+        const [basicRecord, contactRecord, personalRecord, passportRecord, salaryRecord] = await Promise.all([
+            // 1. EmployeeBasic
+            EmployeeBasic.create({
+                firstName,
+                lastName,
+                employeeId,
+                role: employeeRole,
+                department,
+                designation,
+                status: normalizedStatus,
+                probationPeriod: status === 'Probation' ? (probationPeriod || 6) : null, // Default 6 months if not provided
+                reportingAuthority: reportingAuthority || null,
+                profileApprovalStatus: profileApprovalStatus || 'draft',
+                profileStatus: profileStatus || 'inactive',
+                email,
+                enablePortalAccess: enablePortalAccess || false,
+                dateOfJoining,
+            }),
 
-            // Login & Access
-            email,
-            password: hashedPassword, // Only set if enablePortalAccess is true
-            enablePortalAccess: enablePortalAccess || false,
+            // 2. EmployeeContact
+            contactNumber ? EmployeeContact.create({
+                employeeId,
+                contactNumber,
+                addressLine1: addressLine1 || '',
+                addressLine2: addressLine2 || '',
+                country: country || '',
+                state: state || '',
+                city: city || '',
+                postalCode: postalCode || '',
+            }) : null,
 
-            // Employment Info
-            dateOfJoining,
+            // 3. EmployeePersonal
+            gender ? EmployeePersonal.create({
+                employeeId,
+                gender,
+                dateOfBirth: dateOfBirth || null,
+                age: age || null,
+                nationality: nationality || '',
+                fathersName: fathersName || '',
+            }) : null,
 
-            // Contact Info
-            contactNumber,
-            addressLine1: addressLine1 || '',
-            addressLine2: addressLine2 || '',
-            country: country || '',
-            state: state || '',
-            city: city || '',
-            postalCode: postalCode || '',
+            // 4. EmployeePassport (if expiry dates provided)
+            (passportExp || eidExp || medExp) ? EmployeePassport.create({
+                employeeId,
+                passportExp: passportExp || null,
+                eidExp: eidExp || null,
+                medExp: medExp || null,
+            }) : null,
 
-            // Personal Details
-            gender,
-            dateOfBirth: dateOfBirth || null, // Date fields can be null if not provided
-            age: age || null, // Auto-calculated from dateOfBirth
-            nationality: nationality || '',
-            fathersName: fathersName || '',
+            // 5. EmployeeSalary
+            EmployeeSalary.create({
+                employeeId,
+                monthlySalary: monthlySalary || 0,
+                basic: basic || 0,
+                basicPercentage: basicPercentage || 60,
+                houseRentAllowance: houseRentAllowance || 0,
+                houseRentPercentage: houseRentPercentage || 20,
+                otherAllowance: otherAllowance || 0,
+                otherAllowancePercentage: otherAllowancePercentage || 20,
+                additionalAllowances: additionalAllowances || [],
+            }),
+        ]);
 
-            // Document Expiry Details
-            passportExp: passportExp || null, // Date fields can be null if not provided
-            eidExp: eidExp || null, // Date fields can be null if not provided
-            medExp: medExp || null, // Date fields can be null if not provided
+        // If department is "administrator" or "administration", automatically create a user with full permissions
+        if (department && (department.toLowerCase() === 'administrator' || department.toLowerCase() === 'administration') && email) {
+            try {
+                // Check if user already exists for this employee
+                const existingUser = await User.findOne({
+                    $or: [
+                        { employeeId },
+                        { email: email.toLowerCase().trim() }
+                    ]
+                });
 
-            // Salary Structure
-            monthlySalary: monthlySalary || 0,
-            basic: basic || 0,
-            basicPercentage: basicPercentage || 60,
-            houseRentAllowance: houseRentAllowance || 0,
-            houseRentPercentage: houseRentPercentage || 20,
-            otherAllowance: otherAllowance || 0,
-            otherAllowancePercentage: otherAllowancePercentage || 20,
-            additionalAllowances: additionalAllowances || [],
-        });
+                if (!existingUser) {
+                    // Generate username from first name
+                    let username = firstName ? firstName.toLowerCase().trim() : employeeId.toLowerCase();
 
-        const savedEmployee = await newEmployee.save();
+                    // Remove spaces and special characters from username
+                    username = username.replace(/[^a-z0-9]/g, '');
+
+                    // If username is empty after cleaning, use employeeId
+                    if (!username) {
+                        username = employeeId.toLowerCase();
+                    }
+
+                    // Check if username already exists, if so append employeeId
+                    let finalUsername = username;
+                    let usernameExists = await User.findOne({ username: finalUsername });
+                    let counter = 1;
+                    while (usernameExists) {
+                        finalUsername = `${username}${counter}`;
+                        usernameExists = await User.findOne({ username: finalUsername });
+                        counter++;
+                    }
+
+                    // Generate a default password (can be changed later)
+                    // Format: admin@123
+                    const defaultPassword = 'admin@123';
+
+                    // Hash password
+                    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+                    // Calculate password expiry date (180 days from now)
+                    const passwordExpiryDate = new Date();
+                    passwordExpiryDate.setDate(passwordExpiryDate.getDate() + 180);
+
+                    // Create user for administrator
+                    const newUser = new User({
+                        username: finalUsername,
+                        name: `${firstName} ${lastName}`.trim(),
+                        email: email.toLowerCase().trim(),
+                        password: hashedPassword,
+                        employeeId: employeeId,
+                        group: null, // Administrators don't need groups, they get full permissions
+                        groupName: null,
+                        status: 'Active',
+                        enablePortalAccess: true,
+                        isAdmin: true, // Mark as admin to get all permissions
+                        passwordExpiryDate: passwordExpiryDate,
+                    });
+
+                    await newUser.save();
+                    console.log(`User created automatically for administrator employee: ${employeeId} with username: ${finalUsername}`);
+                }
+            } catch (userError) {
+                // Log error but don't fail the employee creation
+                console.error('Error creating user for administrator:', userError);
+                // Continue with employee creation even if user creation fails
+            }
+        }
+
+        // Get complete employee data for response
+        const savedEmployee = await getCompleteEmployee(employeeId);
 
         return res.status(201).json({
             message: "Employee added successfully",

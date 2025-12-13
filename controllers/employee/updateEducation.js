@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeEducation from "../../models/EmployeeEducation.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const updateEducation = async (req, res) => {
     const { id, educationId } = req.params;
@@ -12,13 +13,21 @@ export const updateEducation = async (req, res) => {
     }
 
     try {
-        const employee = await Employee.findById(id);
-
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        const education = employee.educationDetails.id(educationId);
+        const employeeId = employee.employeeId;
+
+        const educationRecord = await EmployeeEducation.findOne({ employeeId });
+
+        if (!educationRecord) {
+            return res.status(404).json({ message: "Education record not found" });
+        }
+
+        const education = educationRecord.educationDetails.id(educationId);
 
         if (!education) {
             return res.status(404).json({ message: "Education record not found" });
@@ -43,17 +52,25 @@ export const updateEducation = async (req, res) => {
             education.certificate = undefined;
         }
 
-        await employee.save();
+        await educationRecord.save();
 
         return res.status(200).json({
             message: "Education details updated successfully",
-            educationDetails: employee.educationDetails
+            educationDetails: educationRecord.educationDetails
         });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: err.message });
     }
 };
+
+
+
+
+
+
+
+
 
 
 

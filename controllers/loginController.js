@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import Employee from "../models/Employee.js";
+import User from "../models/User.js";
+import EmployeeBasic from "../models/EmployeeBasic.js";
+import { getUserPermissions } from "../services/permissionService.js";
 
 
 export const login = async (req, res) => {
@@ -8,15 +10,21 @@ export const login = async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password)
-            return res.status(400).json({ message: "Email and Password are required" });
+            return res.status(400).json({ message: "Email/Username and Password are required" });
 
-        // Find user by email and check if portal access is enabled
-        const user = await Employee.findOne({
-            email: email,
+        const emailOrUsername = email.trim();
+
+        // Find user by email or username and check if portal access is enabled
+        const user = await User.findOne({
+            $or: [
+                { email: emailOrUsername.toLowerCase() },
+                { username: emailOrUsername }
+            ],
+            status: 'Active',
             enablePortalAccess: true
         });
 
-        if (!user) 
+        if (!user)
             return res.status(404).json({ message: "User not found or portal access not enabled" });
 
         // Check if password exists
@@ -29,22 +37,69 @@ export const login = async (req, res) => {
         if (!validPassword)
             return res.status(401).json({ message: "Invalid credentials" });
 
-        // Generate JWT token
+        // Check if user should be admin based on employee department/designation
+        // Update isAdmin field if needed (for existing users)
+        if (user.employeeId && !user.isAdmin) {
+            const employee = await EmployeeBasic.findOne({ employeeId: user.employeeId })
+                .select('designation department')
+                .lean();
+
+            if (employee) {
+                const isAdminByDepartment = employee.department &&
+                    (employee.department.toLowerCase() === 'administrator' ||
+                        employee.department.toLowerCase() === 'administration');
+                const isAdminByDesignation = employee.designation &&
+                    (employee.designation.toLowerCase() === 'administrator' ||
+                        employee.designation.toLowerCase() === 'admin manager');
+
+                const isAdminManager = employee.designation &&
+                    employee.designation.toLowerCase() === 'admin manager' &&
+                    employee.department &&
+                    (employee.department.toLowerCase() === 'administrator' ||
+                        employee.department.toLowerCase() === 'administration');
+
+                if (isAdminByDepartment || isAdminByDesignation || isAdminManager) {
+                    // Update user to set isAdmin = true
+                    user.isAdmin = true;
+                    await user.save();
+                    console.log(`Updated user ${user._id} to admin status based on employee data`);
+                }
+            }
+        }
+
+        // Get user permissions
+        const permissionData = await getUserPermissions(user._id);
+
+        // Extract permissions object from the response
+        const permissions = permissionData?.permissions || {};
+
+        // Update last login
+        user.lastLogin = new Date();
+        await user.save();
+
+        // Generate JWT token with 2 hours expiry (for inactive/offline users)
         const token = jwt.sign(
             { id: user._id },
             process.env.JWT_SECRET,
-            { expiresIn: "7d" }
+            { expiresIn: "2h" }
         );
 
         return res.status(200).json({
             message: "Login successful",
             token,
             user: {
-                name: `${user.firstName} ${user.lastName}`,
+                id: user._id,
+                name: user.name,
                 email: user.email,
+                username: user.username,
             },
+            permissions: permissions,
+            isAdmin: permissionData?.isAdmin || false,
+            isAdministrator: permissionData?.isAdministrator || false,
+            expiresIn: "2h"
         });
     } catch (error) {
+        console.error('Login error:', error);
         return res.status(500).json({ message: error.message });
     }
 };

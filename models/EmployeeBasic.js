@@ -1,0 +1,60 @@
+import mongoose from "mongoose";
+
+/**
+ * EmployeeBasic - Core employee information
+ * Contains: Basic info, Login & Access, Employment info
+ */
+const employeeBasicSchema = new mongoose.Schema(
+    {
+        // BASIC INFO
+        firstName: { type: String, required: true },
+        lastName: { type: String, required: true },
+        employeeId: { type: String, required: true, unique: true }, // Ex: VITS001
+        role: { type: String, default: '' }, // HR Manager, Developer…
+        department: { type: String, default: '' }, // Administration, HR, IT…
+        designation: { type: String, default: '' },
+        status: {
+            type: String,
+            enum: ["Probation", "Permanent", "Temporary", "Notice"],
+            default: "Probation",
+        },
+        probationPeriod: {
+            type: Number,
+            enum: [1, 2, 3, 4, 5, 6],
+            default: null,
+        },
+        reportingAuthority: { type: mongoose.Schema.Types.ObjectId, ref: "EmployeeBasic", default: null },
+        overtime: { type: Boolean, default: false },
+        profileApprovalStatus: {
+            type: String,
+            enum: ["draft", "submitted", "active"],
+            default: "draft"
+        },
+        profileStatus: {
+            type: String,
+            enum: ["active", "inactive"],
+            default: "inactive"
+        },
+
+        // LOGIN & ACCESS
+        email: { type: String, required: true, unique: true },
+        password: { type: String }, // hashed (only if enablePortalAccess is true)
+        enablePortalAccess: { type: Boolean, default: false },
+
+        // EMPLOYMENT INFO
+        dateOfJoining: { type: Date, required: true },
+
+        // PROFILE PICTURE
+        profilePicture: { type: String }, // Cloudinary URL
+    },
+    { timestamps: true }
+);
+
+// Index for faster queries
+// Note: employeeId and email already have indexes from unique: true
+employeeBasicSchema.index({ department: 1 });
+employeeBasicSchema.index({ status: 1 });
+
+export default mongoose.model("EmployeeBasic", employeeBasicSchema);
+
+

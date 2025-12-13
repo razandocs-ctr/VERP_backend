@@ -1,0 +1,141 @@
+import Group from "../../models/Group.js";
+import User from "../../models/User.js";
+
+// Update group
+export const updateGroup = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, users, permissions, status } = req.body;
+
+        const group = await Group.findById(id);
+        if (!group) {
+            return res.status(404).json({ message: "Group not found" });
+        }
+
+        const updateData = {};
+        let newName = group.name;
+
+        if (name !== undefined) {
+            newName = name.trim();
+            // Check if name is already taken by another group
+            if (newName !== group.name) {
+                const existingGroup = await Group.findOne({
+                    name: { $regex: new RegExp(`^${newName}$`, 'i') },
+                    _id: { $ne: id }
+                });
+                if (existingGroup) {
+                    return res.status(400).json({ message: "Group name already exists" });
+                }
+            }
+            updateData.name = newName;
+        }
+        if (permissions !== undefined) updateData.permissions = permissions;
+        if (status !== undefined) updateData.status = status;
+
+        // Handle users update
+        if (users !== undefined) {
+            // Remove all users from this group first
+            await User.updateMany(
+                { group: id },
+                { $set: { group: null, groupName: null } }
+            );
+
+            let normalizedUserIds = [];
+
+            // Assign new users to this group
+            if (users && users.length > 0) {
+                // Normalize users array - extract IDs if they're objects
+                normalizedUserIds = users.map(user => {
+                    // If it's already a string, use it directly
+                    if (typeof user === 'string') {
+                        const trimmed = user.trim();
+                        return trimmed && trimmed !== 'null' && trimmed !== 'undefined' ? trimmed : null;
+                    }
+
+                    // If it's an object, extract the ID
+                    if (user && typeof user === 'object') {
+                        // Try to get _id or id property
+                        const userId = user._id || user.id;
+                        if (userId) {
+                            // If userId is an object (like ObjectId), convert to string
+                            const idString = userId.toString ? userId.toString() : String(userId);
+                            return idString && idString !== 'null' && idString !== 'undefined' ? idString.trim() : null;
+                        }
+                        return null;
+                    }
+
+                    // For other types, try to convert to string
+                    if (user != null) {
+                        const idString = user.toString ? user.toString() : String(user);
+                        // Check if it's "[object Object]" which means conversion failed
+                        if (idString === '[object Object]') {
+                            console.error('Failed to extract ID from user:', user);
+                            return null;
+                        }
+                        return idString.trim();
+                    }
+
+                    return null;
+                }).filter(id => id != null && id !== '' && id !== 'null' && id !== 'undefined' && id !== '[object Object]'); // Remove invalid values
+
+                // Validate that all users exist
+                const usersToAssign = await User.find({ _id: { $in: normalizedUserIds } });
+                if (usersToAssign.length !== normalizedUserIds.length) {
+                    return res.status(400).json({ message: "One or more users not found" });
+                }
+
+                // Check if any user already has a different group
+                const usersWithGroup = usersToAssign.filter(u => u.group && u.group.toString() !== id.toString());
+                if (usersWithGroup.length > 0) {
+                    return res.status(400).json({
+                        message: "One or more users are already assigned to another group"
+                    });
+                }
+
+                // Update users to assign them to this group
+                await User.updateMany(
+                    { _id: { $in: normalizedUserIds } },
+                    {
+                        $set: {
+                            group: id,
+                            groupName: newName
+                        }
+                    }
+                );
+            }
+
+            // Normalize users array for storage
+            updateData.users = normalizedUserIds;
+        }
+
+        const updatedGroup = await Group.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
+
+        // Update groupName in all users with this group (if name changed)
+        if (name !== undefined) {
+            await User.updateMany(
+                { group: id },
+                { $set: { groupName: newName } }
+            );
+        }
+
+        return res.status(200).json({
+            message: "Group updated successfully",
+            group: updatedGroup,
+        });
+    } catch (error) {
+        console.error('Error updating group:', error);
+        if (error.code === 11000) {
+            return res.status(400).json({
+                message: "Group name already exists"
+            });
+        }
+        return res.status(500).json({
+            message: error.message || 'Internal server error'
+        });
+    }
+};
+

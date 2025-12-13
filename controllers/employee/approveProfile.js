@@ -1,21 +1,39 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const approveProfile = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const employee = await Employee.findById(id);
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        employee.profileApprovalStatus = "active";
-        employee.profileStatus = "active";
-        await employee.save();
+        const employeeId = employee.employeeId;
+
+        // Update EmployeeBasic
+        const updated = await EmployeeBasic.findOneAndUpdate(
+            { employeeId },
+            {
+                profileApprovalStatus: "active",
+                profileStatus: "active"
+            },
+            { new: true }
+        );
+
+        if (!updated) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        // Get complete employee data for response
+        const completeEmployee = await getCompleteEmployee(employeeId);
+        delete completeEmployee.password;
 
         return res.status(200).json({
             message: "Employee profile marked as approved.",
-            employee
+            employee: completeEmployee
         });
     } catch (error) {
         console.error("Failed to approve profile:", error);

@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeEmergencyContact from "../../models/EmployeeEmergencyContact.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const updateEmergencyContact = async (req, res) => {
     const { id, contactId } = req.params;
@@ -18,8 +19,16 @@ export const updateEmergencyContact = async (req, res) => {
     const normalizedNumber = rawNumber.startsWith('+') ? rawNumber : `+${rawNumber}`;
 
     try {
-        const employee = await Employee.findOneAndUpdate(
-            { _id: id, "emergencyContacts._id": contactId },
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        const employeeId = employee.employeeId;
+
+        const updated = await EmployeeEmergencyContact.findOneAndUpdate(
+            { employeeId, "emergencyContacts._id": contactId },
             {
                 $set: {
                     "emergencyContacts.$.name": trimmedName,
@@ -28,28 +37,29 @@ export const updateEmergencyContact = async (req, res) => {
                 }
             },
             { new: true, runValidators: true }
-        ).select("-password");
+        );
 
-        if (!employee) {
+        if (!updated) {
             return res.status(404).json({ message: "Employee or contact not found" });
         }
 
-        const primaryContact = employee.emergencyContacts?.[0];
+        // Update legacy fields from first contact
+        const primaryContact = updated.emergencyContacts?.[0];
         if (primaryContact) {
-            employee.emergencyContactName = primaryContact.name || '';
-            employee.emergencyContactRelation = primaryContact.relation || 'Self';
-            employee.emergencyContactNumber = primaryContact.number || '';
+            updated.emergencyContactName = primaryContact.name || '';
+            updated.emergencyContactRelation = primaryContact.relation || 'Self';
+            updated.emergencyContactNumber = primaryContact.number || '';
         } else {
-            employee.emergencyContactName = '';
-            employee.emergencyContactRelation = '';
-            employee.emergencyContactNumber = '';
+            updated.emergencyContactName = '';
+            updated.emergencyContactRelation = '';
+            updated.emergencyContactNumber = '';
         }
 
-        await employee.save();
+        await updated.save();
 
         return res.status(200).json({
             message: "Emergency contact updated",
-            emergencyContacts: employee.emergencyContacts
+            emergencyContacts: updated.emergencyContacts
         });
     } catch (err) {
         console.error(err);

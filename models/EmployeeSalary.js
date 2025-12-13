@@ -1,0 +1,62 @@
+import mongoose from "mongoose";
+
+/**
+ * EmployeeSalary - Salary structure and history
+ * Contains: Current salary structure, Salary history
+ */
+const additionalAllowanceSchema = new mongoose.Schema(
+    {
+        type: { type: String },
+        amount: { type: Number, default: 0 },
+        percentage: { type: Number, default: 0 },
+    },
+    { _id: false }
+);
+
+const salaryHistorySchema = new mongoose.Schema(
+    {
+        month: { type: String }, // e.g., "January 2024"
+        fromDate: { type: Date },
+        toDate: { type: Date, default: null }, // null for current/active entry
+        basic: { type: Number, default: 0 },
+        houseRentAllowance: { type: Number, default: 0 },
+        otherAllowance: { type: Number, default: 0 },
+        vehicleAllowance: { type: Number, default: 0 },
+        totalSalary: { type: Number, default: 0 },
+        createdAt: { type: Date, default: Date.now }
+    },
+    { _id: true }
+);
+
+const employeeSalarySchema = new mongoose.Schema(
+    {
+        employeeId: {
+            type: String,
+            required: true,
+            ref: "EmployeeBasic"
+        },
+
+        // SALARY STRUCTURE
+        monthlySalary: { type: Number, default: 0 },
+        basic: { type: Number, default: 0 },
+        basicPercentage: { type: Number, default: 60 }, // auto calculation possible
+        houseRentAllowance: { type: Number, default: 0 },
+        houseRentPercentage: { type: Number, default: 20 },
+        otherAllowance: { type: Number, default: 0 },
+        otherAllowancePercentage: { type: Number, default: 20 },
+        additionalAllowances: [additionalAllowanceSchema],
+
+        // SALARY HISTORY
+        salaryHistory: [salaryHistorySchema],
+    },
+    { timestamps: true }
+);
+
+// Index for faster queries
+employeeSalarySchema.index({ monthlySalary: 1 });
+
+// Ensure one salary record per employee
+employeeSalarySchema.index({ employeeId: 1 }, { unique: true });
+
+export default mongoose.model("EmployeeSalary", employeeSalarySchema);
+

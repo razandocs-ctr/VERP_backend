@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeEmergencyContact from "../../models/EmployeeEmergencyContact.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const deleteEmergencyContact = async (req, res) => {
     const { id, contactId } = req.params;
@@ -8,13 +9,21 @@ export const deleteEmergencyContact = async (req, res) => {
     }
 
     try {
-        const employee = await Employee.findById(id);
-
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        const contact = employee.emergencyContacts.id(contactId);
+        const employeeId = employee.employeeId;
+
+        const contactRecord = await EmployeeEmergencyContact.findOne({ employeeId });
+
+        if (!contactRecord) {
+            return res.status(404).json({ message: "Emergency contact record not found" });
+        }
+
+        const contact = contactRecord.emergencyContacts.id(contactId);
 
         if (!contact) {
             return res.status(404).json({ message: "Emergency contact not found" });
@@ -22,28 +31,37 @@ export const deleteEmergencyContact = async (req, res) => {
 
         contact.deleteOne();
 
-        const primaryContact = employee.emergencyContacts?.[0];
+        // Update legacy fields from first contact
+        const primaryContact = contactRecord.emergencyContacts?.[0];
         if (primaryContact) {
-            employee.emergencyContactName = primaryContact.name || '';
-            employee.emergencyContactRelation = primaryContact.relation || 'Self';
-            employee.emergencyContactNumber = primaryContact.number || '';
+            contactRecord.emergencyContactName = primaryContact.name || '';
+            contactRecord.emergencyContactRelation = primaryContact.relation || 'Self';
+            contactRecord.emergencyContactNumber = primaryContact.number || '';
         } else {
-            employee.emergencyContactName = '';
-            employee.emergencyContactRelation = '';
-            employee.emergencyContactNumber = '';
+            contactRecord.emergencyContactName = '';
+            contactRecord.emergencyContactRelation = '';
+            contactRecord.emergencyContactNumber = '';
         }
 
-        await employee.save();
+        await contactRecord.save();
 
         return res.status(200).json({
             message: "Emergency contact deleted",
-            emergencyContacts: employee.emergencyContacts
+            emergencyContacts: contactRecord.emergencyContacts
         });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: err.message });
     }
 };
+
+
+
+
+
+
+
+
 
 
 

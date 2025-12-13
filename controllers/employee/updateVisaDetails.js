@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeVisa from "../../models/EmployeeVisa.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 const ALLOWED_VISA_TYPES = ["visit", "employment", "spouse"];
 
@@ -62,6 +63,14 @@ export const updateVisaDetails = async (req, res) => {
     }
 
     try {
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found." });
+        }
+
+        const employeeId = employee.employeeId;
+
         const visaPayload = {
             number: visaNumber,
             issueDate: parsedIssueDate,
@@ -77,23 +86,24 @@ export const updateVisaDetails = async (req, res) => {
             lastUpdated: new Date(),
         };
 
-        const employee = await Employee.findByIdAndUpdate(
-            id,
+        // Update or create visa record
+        const updatedVisa = await EmployeeVisa.findOneAndUpdate(
+            { employeeId },
             {
                 $set: {
-                    [`visaDetails.${visaType}`]: visaPayload,
+                    [visaType]: visaPayload,
                 },
             },
-            { new: true }
+            { upsert: true, new: true }
         );
-
-        if (!employee) {
-            return res.status(404).json({ message: "Employee not found." });
-        }
 
         return res.json({
             message: `${visaType} visa details updated successfully.`,
-            visaDetails: employee.visaDetails,
+            visaDetails: {
+                visit: updatedVisa.visit,
+                employment: updatedVisa.employment,
+                spouse: updatedVisa.spouse,
+            },
         });
     } catch (error) {
         console.error("Failed to update visa details:", error);

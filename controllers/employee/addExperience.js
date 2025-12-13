@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeExperience from "../../models/EmployeeExperience.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const addExperience = async (req, res) => {
     const { id } = req.params;
@@ -19,6 +20,14 @@ export const addExperience = async (req, res) => {
     }
 
     try {
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        const employeeId = employee.employeeId;
+
         const experienceData = {
             company: company.trim(),
             designation: designation.trim(),
@@ -31,15 +40,16 @@ export const addExperience = async (req, res) => {
             } : undefined
         };
 
-        const updated = await Employee.findByIdAndUpdate(
-            id,
+        // Update or create experience record
+        const updated = await EmployeeExperience.findOneAndUpdate(
+            { employeeId },
             {
                 $push: {
                     experienceDetails: experienceData
                 }
             },
-            { new: true, runValidators: true }
-        ).select("-password");
+            { upsert: true, new: true, runValidators: true }
+        );
 
         if (!updated) {
             return res.status(404).json({ message: "Employee not found" });
@@ -54,6 +64,14 @@ export const addExperience = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
+
+
+
+
+
+
+
+
 
 
 

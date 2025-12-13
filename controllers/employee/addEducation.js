@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeEducation from "../../models/EmployeeEducation.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const addEducation = async (req, res) => {
     const { id } = req.params;
@@ -12,6 +13,14 @@ export const addEducation = async (req, res) => {
     }
 
     try {
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        const employeeId = employee.employeeId;
+
         const educationData = {
             universityOrBoard: universityOrBoard.trim(),
             collegeOrInstitute: collegeOrInstitute.trim(),
@@ -25,15 +34,16 @@ export const addEducation = async (req, res) => {
             } : undefined
         };
 
-        const updated = await Employee.findByIdAndUpdate(
-            id,
+        // Update or create education record
+        const updated = await EmployeeEducation.findOneAndUpdate(
+            { employeeId },
             {
                 $push: {
                     educationDetails: educationData
                 }
             },
-            { new: true, runValidators: true }
-        ).select("-password");
+            { upsert: true, new: true, runValidators: true }
+        );
 
         if (!updated) {
             return res.status(404).json({ message: "Employee not found" });
@@ -48,6 +58,14 @@ export const addEducation = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
+
+
+
+
+
+
+
+
 
 
 

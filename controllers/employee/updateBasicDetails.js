@@ -1,10 +1,19 @@
-import Employee from "../../models/Employee.js";
+import { getCompleteEmployee, saveEmployeeData } from "../../services/employeeService.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
 
 export const updateBasicDetails = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // 1. Define allowed fields
+        // Get employeeId from the employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        const employeeId = employee.employeeId;
+
+        // 1. Define allowed fields and their target collections
         const allowedFields = [
             "employeeId",
             "contactNumber",
@@ -27,7 +36,6 @@ export const updateBasicDetails = async (req, res) => {
             "addressLine2",
             "city",
             "state",
-            "country",
             "postalCode",
             "currentAddressLine1",
             "currentAddressLine2",
@@ -64,16 +72,15 @@ export const updateBasicDetails = async (req, res) => {
             return res.status(400).json({ message: "Nothing to update" });
         }
 
-        // 4. Update DB
-        const updated = await Employee.findByIdAndUpdate(
-            id,
-            { $set: updatePayload },
-            { new: true, runValidators: true }
-        ).select("-password");
+        // 4. Update using service (which handles routing to correct collections)
+        const updated = await saveEmployeeData(employeeId, updatePayload);
 
         if (!updated) {
             return res.status(404).json({ message: "Employee not found" });
         }
+
+        // Remove password from response
+        delete updated.password;
 
         // 5. Return success
         return res.status(200).json({

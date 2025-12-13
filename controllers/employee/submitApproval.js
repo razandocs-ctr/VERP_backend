@@ -1,11 +1,12 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const submitApproval = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const employee = await Employee.findById(id).populate("reportingAuthority");
-
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
@@ -14,12 +15,26 @@ export const submitApproval = async (req, res) => {
             return res.status(400).json({ message: "Please assign a reporting authority before submitting for approval." });
         }
 
-        employee.profileApprovalStatus = "submitted";
-        await employee.save();
+        const employeeId = employee.employeeId;
+
+        // Update EmployeeBasic
+        const updated = await EmployeeBasic.findOneAndUpdate(
+            { employeeId },
+            { profileApprovalStatus: "submitted" },
+            { new: true }
+        ).populate("reportingAuthority", "firstName lastName email workEmail");
+
+        if (!updated) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        // Get complete employee data for response
+        const completeEmployee = await getCompleteEmployee(employeeId);
+        delete completeEmployee.password;
 
         return res.status(200).json({
             message: "Profile submitted for approval.",
-            employee
+            employee: completeEmployee
         });
     } catch (error) {
         console.error("Failed to submit profile for approval:", error);

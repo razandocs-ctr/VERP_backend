@@ -1,12 +1,13 @@
 import nodemailer from "nodemailer";
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const sendApprovalEmail = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const employee = await Employee.findById(id).populate("reportingAuthority");
-
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
@@ -15,7 +16,14 @@ export const sendApprovalEmail = async (req, res) => {
             return res.status(400).json({ message: "Reporting authority is not assigned for this employee." });
         }
 
-        const reporteeEmail = employee.reportingAuthority.email || employee.reportingAuthority.workEmail;
+        // Get reporting authority details
+        const reportingAuthority = await EmployeeBasic.findById(employee.reportingAuthority).select("firstName lastName email");
+        
+        if (!reportingAuthority) {
+            return res.status(400).json({ message: "Reporting authority not found." });
+        }
+
+        const reporteeEmail = reportingAuthority.email;
         if (!reporteeEmail) {
             return res.status(400).json({ message: "Reporting authority email is missing." });
         }
@@ -36,7 +44,7 @@ export const sendApprovalEmail = async (req, res) => {
         });
 
         const employeeName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || "Employee";
-        const reporteeName = `${employee.reportingAuthority.firstName || ""} ${employee.reportingAuthority.lastName || ""}`.trim();
+        const reporteeName = `${reportingAuthority.firstName || ""} ${reportingAuthority.lastName || ""}`.trim();
         const subject = `Profile activation request: ${employeeName}`;
 
         const html = `
@@ -58,9 +66,11 @@ export const sendApprovalEmail = async (req, res) => {
             html
         });
 
-        if (employee.profileApprovalStatus !== "submitted") {
-            employee.profileApprovalStatus = "submitted";
-            await employee.save();
+        const employeeId = employee.employeeId;
+        const basicRecord = await EmployeeBasic.findOne({ employeeId });
+        if (basicRecord && basicRecord.profileApprovalStatus !== "submitted") {
+            basicRecord.profileApprovalStatus = "submitted";
+            await basicRecord.save();
         }
 
         return res.status(200).json({ message: "Approval request sent successfully." });

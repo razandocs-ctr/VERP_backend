@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeEmergencyContact from "../../models/EmployeeEmergencyContact.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const addEmergencyContact = async (req, res) => {
     const { id } = req.params;
@@ -11,8 +12,16 @@ export const addEmergencyContact = async (req, res) => {
     const normalizedNumber = number.startsWith('+') ? number : `+${number}`;
 
     try {
-        const updated = await Employee.findByIdAndUpdate(
-            id,
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        const employeeId = employee.employeeId;
+
+        const updated = await EmployeeEmergencyContact.findOneAndUpdate(
+            { employeeId },
             {
                 $push: {
                     emergencyContacts: {
@@ -27,8 +36,8 @@ export const addEmergencyContact = async (req, res) => {
                     emergencyContactNumber: normalizedNumber
                 }
             },
-            { new: true, runValidators: true }
-        ).select("-password");
+            { upsert: true, new: true, runValidators: true }
+        );
 
         if (!updated) {
             return res.status(404).json({ message: "Employee not found" });

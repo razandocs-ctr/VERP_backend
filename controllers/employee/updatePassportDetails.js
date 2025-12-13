@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeePassport from "../../models/EmployeePassport.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate"];
 
@@ -45,7 +46,15 @@ export const updatePassportDetails = async (req, res) => {
     }
 
     try {
-        // Build passport payload - only fields from frontend form
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found." });
+        }
+
+        const employeeId = employee.employeeId;
+
+        // Build passport payload
         const passportPayload = {
             number: number?.trim() || "",
             nationality: nationality?.trim() || "",
@@ -54,37 +63,37 @@ export const updatePassportDetails = async (req, res) => {
             placeOfIssue: placeOfIssue?.trim() || "",
             document: passportCopy
                 ? {
-                      data: passportCopy,
-                      name: passportCopyName || "",
-                      mimeType: passportCopyMime || "",
-                  }
+                    data: passportCopy,
+                    name: passportCopyName || "",
+                    mimeType: passportCopyMime || "",
+                }
                 : undefined,
             lastUpdated: new Date(),
+            passportExp: parsedExpiryDate, // Update expiry date for quick reference
         };
 
-        // Update employee passport details and also update passportExp for backward compatibility
-        const employee = await Employee.findByIdAndUpdate(
-            id,
-            {
-                $set: {
-                    passportDetails: passportPayload,
-                    passportExp: parsedExpiryDate, // Update expiry date for backward compatibility
-                },
-            },
-            { new: true }
+        // Update or create passport record
+        const updatedPassport = await EmployeePassport.findOneAndUpdate(
+            { employeeId },
+            passportPayload,
+            { upsert: true, new: true }
         );
 
-        if (!employee) {
-            return res.status(404).json({ message: "Employee not found." });
-        }
-
-        console.log("✅ Passport details saved for employee:", employee.employeeId);
+        console.log("✅ Passport details saved for employee:", employeeId);
         console.log("   Passport Number:", passportPayload.number);
         console.log("   Expiry Date:", passportPayload.expiryDate);
 
         return res.json({
             message: "Passport details updated successfully.",
-            passportDetails: employee.passportDetails,
+            passportDetails: {
+                number: updatedPassport.number,
+                nationality: updatedPassport.nationality,
+                issueDate: updatedPassport.issueDate,
+                expiryDate: updatedPassport.expiryDate,
+                placeOfIssue: updatedPassport.placeOfIssue,
+                document: updatedPassport.document,
+                lastUpdated: updatedPassport.lastUpdated,
+            },
         });
     } catch (error) {
         console.error("Failed to update passport details:", error);

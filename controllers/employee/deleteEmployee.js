@@ -1,14 +1,20 @@
-import Employee from "../../models/Employee.js";
+import { deleteEmployeeData, getCompleteEmployee } from "../../services/employeeService.js";
 
 // Delete employee
 export const deleteEmployee = async (req, res) => {
     try {
         const { id } = req.params;
-        const deletedEmployee = await Employee.findByIdAndDelete(id);
-
-        if (!deletedEmployee) {
+        
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
+
+        const employeeId = employee.employeeId;
+
+        // Delete from all collections
+        await deleteEmployeeData(employeeId);
 
         return res.status(200).json({
             message: "Employee deleted successfully",

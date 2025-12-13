@@ -20,39 +20,64 @@ import { addExperience } from "../controllers/employee/addExperience.js";
 import { updateExperience } from "../controllers/employee/updateExperience.js";
 import { deleteExperience } from "../controllers/employee/deleteExperience.js";
 import { uploadProfilePicture } from "../controllers/employee/uploadProfilePicture.js";
-import { extractPdfText } from "../controllers/employee/extractPdfText.js";
+import { protect } from "../middleware/authMiddleware.js";
+import { checkPermission } from "../middleware/permissionMiddleware.js";
+
 const router = express.Router();
 
-router.get("/", getEmployees);
-router.post("/", addEmployee);
+// All employee routes require authentication
+router.use(protect);
+
+// Employee list - requires view permission
+router.get("/", checkPermission('hrm_employees_list', 'view'), getEmployees);
+
+// Add employee - requires create permission
+router.post("/", checkPermission('hrm_employees_add', 'create'), addEmployee);
+
 // Specific routes MUST come before generic :id routes
-router.patch("/basic-details/:id", updateBasicDetails);
-router.patch("/work-details/:id", updateWorkDetails);
-router.patch("/passport/:id", updatePassportDetails);
-router.patch("/visa/:id", updateVisaDetails);
-// Upload profile picture route (specific route before generic :id routes)
-router.post("/upload-profile-picture/:id", uploadProfilePicture);
-// PDF extraction route (must be before :id routes)
-router.post("/extract-pdf-text", (req, res, next) => {
-    console.log('📄 PDF extraction route matched');
-    extractPdfText(req, res, next);
-});
+// Update basic details - requires edit permission
+router.patch("/basic-details/:id", checkPermission('hrm_employees_view_basic', 'edit'), updateBasicDetails);
+
+// Update work details - requires edit permission
+router.patch("/work-details/:id", checkPermission('hrm_employees_view_work', 'edit'), updateWorkDetails);
+
+// Update passport - requires edit permission
+router.patch("/passport/:id", checkPermission('hrm_employees_view_passport', 'edit'), updatePassportDetails);
+
+// Update visa - requires edit permission
+router.patch("/visa/:id", checkPermission('hrm_employees_view_visa', 'edit'), updateVisaDetails);
+
+// Upload profile picture - requires edit permission
+router.post("/upload-profile-picture/:id", checkPermission('hrm_employees_view_basic', 'edit'), uploadProfilePicture);
+
 // All :id specific routes must come before the generic :id route
-router.post("/:id/emergency-contact", addEmergencyContact);
-router.patch("/:id/emergency-contact/:contactId", updateEmergencyContact);
-router.delete("/:id/emergency-contact/:contactId", deleteEmergencyContact);
-router.post("/:id/education", addEducation);
-router.patch("/:id/education/:educationId", updateEducation);
-router.delete("/:id/education/:educationId", deleteEducation);
-router.post("/:id/experience", addExperience);
-router.patch("/:id/experience/:experienceId", updateExperience);
-router.delete("/:id/experience/:experienceId", deleteExperience);
-router.post("/:id/send-approval-email", sendApprovalEmail);
-router.post("/:id/approve-profile", approveProfile);
+// Emergency contacts - requires edit permission
+router.post("/:id/emergency-contact", checkPermission('hrm_employees_view_emergency', 'create'), addEmergencyContact);
+router.patch("/:id/emergency-contact/:contactId", checkPermission('hrm_employees_view_emergency', 'edit'), updateEmergencyContact);
+router.delete("/:id/emergency-contact/:contactId", checkPermission('hrm_employees_view_emergency', 'delete'), deleteEmergencyContact);
+
+// Education - requires edit permission
+router.post("/:id/education", checkPermission('hrm_employees_view_education', 'create'), addEducation);
+router.patch("/:id/education/:educationId", checkPermission('hrm_employees_view_education', 'edit'), updateEducation);
+router.delete("/:id/education/:educationId", checkPermission('hrm_employees_view_education', 'delete'), deleteEducation);
+
+// Experience - requires edit permission
+router.post("/:id/experience", checkPermission('hrm_employees_view_experience', 'create'), addExperience);
+router.patch("/:id/experience/:experienceId", checkPermission('hrm_employees_view_experience', 'edit'), updateExperience);
+router.delete("/:id/experience/:experienceId", checkPermission('hrm_employees_view_experience', 'delete'), deleteExperience);
+
+// Send approval email - requires edit permission
+router.post("/:id/send-approval-email", checkPermission('hrm_employees', 'edit'), sendApprovalEmail);
+
+// Approve profile - requires edit permission
+router.post("/:id/approve-profile", checkPermission('hrm_employees', 'edit'), approveProfile);
+
 // Generic :id routes must come last
-router.get("/:id", getEmployeeById);
-// router.put("/:id", updateEmployee);
-router.delete("/:id", deleteEmployee);
+// Get employee by ID - requires view permission
+router.get("/:id", checkPermission('hrm_employees_view', 'view'), getEmployeeById);
+
+// Delete employee - requires delete permission
+router.delete("/:id", checkPermission('hrm_employees', 'delete'), deleteEmployee);
 
 export default router;
 

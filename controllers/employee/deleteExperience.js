@@ -1,4 +1,5 @@
-import Employee from "../../models/Employee.js";
+import EmployeeExperience from "../../models/EmployeeExperience.js";
+import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const deleteExperience = async (req, res) => {
     const { id, experienceId } = req.params;
@@ -8,30 +9,46 @@ export const deleteExperience = async (req, res) => {
     }
 
     try {
-        const employee = await Employee.findById(id);
-
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        const experience = employee.experienceDetails.id(experienceId);
+        const employeeId = employee.employeeId;
+
+        const experienceRecord = await EmployeeExperience.findOne({ employeeId });
+
+        if (!experienceRecord) {
+            return res.status(404).json({ message: "Experience record not found" });
+        }
+
+        const experience = experienceRecord.experienceDetails.id(experienceId);
 
         if (!experience) {
             return res.status(404).json({ message: "Experience record not found" });
         }
 
         experience.deleteOne();
-        await employee.save();
+        await experienceRecord.save();
 
         return res.status(200).json({
             message: "Experience record deleted successfully",
-            experienceDetails: employee.experienceDetails
+            experienceDetails: experienceRecord.experienceDetails
         });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ message: err.message });
     }
 };
+
+
+
+
+
+
+
+
 
 
 

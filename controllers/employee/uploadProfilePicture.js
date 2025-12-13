@@ -1,5 +1,6 @@
 import cloudinary from '../../config/cloudinary.js';
-import Employee from '../../models/Employee.js';
+import EmployeeBasic from '../../models/EmployeeBasic.js';
+import { getCompleteEmployee } from '../../services/employeeService.js';
 
 export const uploadProfilePicture = async (req, res) => {
     try {
@@ -19,6 +20,14 @@ export const uploadProfilePicture = async (req, res) => {
             return res.status(400).json({ message: 'Invalid image format' });
         }
 
+        // Get employeeId from employee record
+        const employee = await getCompleteEmployee(id);
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        const employeeId = employee.employeeId;
+
         // Upload to Cloudinary with optimizations
         const uploadResult = await cloudinary.uploader.upload(image, {
             folder: 'employee-profiles',
@@ -35,9 +44,9 @@ export const uploadProfilePicture = async (req, res) => {
             ]
         });
 
-        // Update employee with Cloudinary URL
-        const updated = await Employee.findByIdAndUpdate(
-            id,
+        // Update EmployeeBasic with Cloudinary URL
+        const updated = await EmployeeBasic.findOneAndUpdate(
+            { employeeId },
             { profilePicture: uploadResult.secure_url },
             { new: true, runValidators: true }
         ).select('-password');
@@ -46,10 +55,14 @@ export const uploadProfilePicture = async (req, res) => {
             return res.status(404).json({ message: 'Employee not found' });
         }
 
+        // Get complete employee data for response
+        const completeEmployee = await getCompleteEmployee(employeeId);
+        delete completeEmployee.password;
+
         return res.status(200).json({
             message: 'Profile picture uploaded successfully',
             profilePicture: uploadResult.secure_url,
-            employee: updated
+            employee: completeEmployee
         });
     } catch (error) {
         console.error('Error uploading profile picture:', error);
