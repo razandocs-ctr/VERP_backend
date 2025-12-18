@@ -22,7 +22,19 @@ const salaryHistorySchema = new mongoose.Schema(
         houseRentAllowance: { type: Number, default: 0 },
         otherAllowance: { type: Number, default: 0 },
         vehicleAllowance: { type: Number, default: 0 },
+        fuelAllowance: { type: Number, default: 0 },
+        additionalAllowances: [additionalAllowanceSchema], // Store all additional allowances
         totalSalary: { type: Number, default: 0 },
+        attachment: {
+            data: { type: String },
+            name: { type: String },
+            mimeType: { type: String },
+        },
+        offerLetter: {
+            data: { type: String },
+            name: { type: String },
+            mimeType: { type: String },
+        },
         createdAt: { type: Date, default: Date.now }
     },
     { _id: true }
@@ -38,6 +50,7 @@ const employeeSalarySchema = new mongoose.Schema(
 
         // SALARY STRUCTURE
         monthlySalary: { type: Number, default: 0 },
+        totalSalary: { type: Number, default: 0 }, // Total salary calculated and stored
         basic: { type: Number, default: 0 },
         basicPercentage: { type: Number, default: 60 }, // auto calculation possible
         houseRentAllowance: { type: Number, default: 0 },
@@ -45,6 +58,11 @@ const employeeSalarySchema = new mongoose.Schema(
         otherAllowance: { type: Number, default: 0 },
         otherAllowancePercentage: { type: Number, default: 20 },
         additionalAllowances: [additionalAllowanceSchema],
+        offerLetter: {
+            data: { type: String },
+            name: { type: String },
+            mimeType: { type: String },
+        },
 
         // SALARY HISTORY
         salaryHistory: [salaryHistorySchema],

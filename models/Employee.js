@@ -177,6 +177,35 @@ const employeeSchema = new mongoose.Schema(
             }
         ],
 
+        // DOCUMENTS
+        documents: [
+            {
+                type: { type: String },
+                description: { type: String },
+                document: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
+
+        // TRAINING DETAILS
+        trainingDetails: [
+            {
+                trainingName: { type: String },
+                trainingDetails: { type: String },
+                trainingFrom: { type: String },
+                trainingDate: { type: Date },
+                trainingCost: { type: Number },
+                certificate: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
+
         // SALARY HISTORY
         salaryHistory: [
             {

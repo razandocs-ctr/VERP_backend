@@ -11,7 +11,11 @@ import { sendApprovalEmail } from "../controllers/employee/sendApprovalEmail.js"
 import { approveProfile } from "../controllers/employee/approveProfile.js";
 import { deleteEmployee } from "../controllers/employee/deleteEmployee.js";
 import { updateVisaDetails } from "../controllers/employee/updateVisaDetails.js";
+import { updateEmiratesIdDetails } from "../controllers/employee/updateEmiratesIdDetails.js";
+import { updateLabourCardDetails } from "../controllers/employee/updateLabourCardDetails.js";
+import { updateMedicalInsuranceDetails } from "../controllers/employee/updateMedicalInsuranceDetails.js";
 import { updatePassportDetails } from "../controllers/employee/updatePassportDetails.js";
+import { updateDrivingLicenseDetails } from "../controllers/employee/updateDrivingLicenseDetails.js";
 import { updateWorkDetails } from "../controllers/employee/updateWorkDetails.js";
 import { addEducation } from "../controllers/employee/addEducation.js";
 import { updateEducation } from "../controllers/employee/updateEducation.js";
@@ -19,6 +23,9 @@ import { deleteEducation } from "../controllers/employee/deleteEducation.js";
 import { addExperience } from "../controllers/employee/addExperience.js";
 import { updateExperience } from "../controllers/employee/updateExperience.js";
 import { deleteExperience } from "../controllers/employee/deleteExperience.js";
+import { addTraining } from "../controllers/employee/addTraining.js";
+import { updateTraining } from "../controllers/employee/updateTraining.js";
+import { deleteTraining } from "../controllers/employee/deleteTraining.js";
 import { uploadProfilePicture } from "../controllers/employee/uploadProfilePicture.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { checkPermission } from "../middleware/permissionMiddleware.js";
@@ -47,6 +54,18 @@ router.patch("/passport/:id", checkPermission('hrm_employees_view_passport', 'ed
 // Update visa - requires edit permission
 router.patch("/visa/:id", checkPermission('hrm_employees_view_visa', 'edit'), updateVisaDetails);
 
+// Update Emirates ID - requires edit permission
+router.patch("/emirates-id/:id", checkPermission('hrm_employees_view_passport', 'edit'), updateEmiratesIdDetails);
+
+// Update Labour Card - requires edit permission
+router.patch("/labour-card/:id", checkPermission('hrm_employees_view_passport', 'edit'), updateLabourCardDetails);
+
+// Update Medical Insurance - requires edit permission
+router.patch("/medical-insurance/:id", checkPermission('hrm_employees_view_passport', 'edit'), updateMedicalInsuranceDetails);
+
+// Update Driving License - requires edit permission
+router.patch("/driving-license/:id", checkPermission('hrm_employees_view_passport', 'edit'), updateDrivingLicenseDetails);
+
 // Upload profile picture - requires edit permission
 router.post("/upload-profile-picture/:id", checkPermission('hrm_employees_view_basic', 'edit'), uploadProfilePicture);
 
@@ -65,6 +84,11 @@ router.delete("/:id/education/:educationId", checkPermission('hrm_employees_view
 router.post("/:id/experience", checkPermission('hrm_employees_view_experience', 'create'), addExperience);
 router.patch("/:id/experience/:experienceId", checkPermission('hrm_employees_view_experience', 'edit'), updateExperience);
 router.delete("/:id/experience/:experienceId", checkPermission('hrm_employees_view_experience', 'delete'), deleteExperience);
+
+// Training - requires edit permission
+router.post("/:id/training", checkPermission('hrm_employees_view_training', 'create'), addTraining);
+router.patch("/:id/training/:trainingId", checkPermission('hrm_employees_view_training', 'edit'), updateTraining);
+router.delete("/:id/training/:trainingId", checkPermission('hrm_employees_view_training', 'delete'), deleteTraining);
 
 // Send approval email - requires edit permission
 router.post("/:id/send-approval-email", checkPermission('hrm_employees', 'edit'), sendApprovalEmail);

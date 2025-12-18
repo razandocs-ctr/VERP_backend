@@ -117,6 +117,46 @@ export const addEmployee = async (req, res) => {
         // Use designation as role if role is not provided
         const employeeRole = role || designation || '';
 
+        // Calculate salary values before Promise.all
+        const basicAmount = parseFloat(basic) || 0;
+        const hraAmount = parseFloat(houseRentAllowance) || 0;
+        const otherAmount = parseFloat(otherAllowance) || 0;
+        const additionalTotal = Array.isArray(additionalAllowances)
+            ? additionalAllowances.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
+            : 0;
+        const calculatedTotal = basicAmount + hraAmount + otherAmount + additionalTotal;
+
+        // Create initial salary history entry
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const joiningDate = dateOfJoining ? new Date(dateOfJoining) : new Date();
+        const firstDayOfMonth = new Date(joiningDate.getFullYear(), joiningDate.getMonth(), 1);
+        const month = monthNames[joiningDate.getMonth()];
+
+        // Extract vehicle allowance from additionalAllowances
+        const vehicleAllowance = additionalAllowances?.find(a => a.type?.toLowerCase().includes('vehicle'))?.amount
+            ? parseFloat(additionalAllowances.find(a => a.type?.toLowerCase().includes('vehicle')).amount)
+            : 0;
+        
+        // Extract fuel allowance from additionalAllowances
+        const fuelAllowance = additionalAllowances?.find(a => a.type?.toLowerCase().includes('fuel'))?.amount
+            ? parseFloat(additionalAllowances.find(a => a.type?.toLowerCase().includes('fuel')).amount)
+            : 0;
+
+        const initialSalaryHistory = [{
+            month: month,
+            fromDate: firstDayOfMonth,
+            toDate: null, // Active entry
+            basic: basicAmount,
+            houseRentAllowance: hraAmount,
+            otherAllowance: otherAmount,
+            vehicleAllowance: vehicleAllowance,
+            fuelAllowance: fuelAllowance,
+            additionalAllowances: additionalAllowances || [],
+            totalSalary: calculatedTotal,
+            createdAt: joiningDate,
+            isInitial: true
+        }];
+
         // Create records in all collections
         const [basicRecord, contactRecord, personalRecord, passportRecord, salaryRecord] = await Promise.all([
             // 1. EmployeeBasic
@@ -170,14 +210,16 @@ export const addEmployee = async (req, res) => {
             // 5. EmployeeSalary
             EmployeeSalary.create({
                 employeeId,
-                monthlySalary: monthlySalary || 0,
-                basic: basic || 0,
+                monthlySalary: calculatedTotal,
+                totalSalary: calculatedTotal,
+                basic: basicAmount,
                 basicPercentage: basicPercentage || 60,
-                houseRentAllowance: houseRentAllowance || 0,
+                houseRentAllowance: hraAmount,
                 houseRentPercentage: houseRentPercentage || 20,
-                otherAllowance: otherAllowance || 0,
+                otherAllowance: otherAmount,
                 otherAllowancePercentage: otherAllowancePercentage || 20,
                 additionalAllowances: additionalAllowances || [],
+                salaryHistory: initialSalaryHistory, // Add initial history entry
             }),
         ]);
 

@@ -10,6 +10,8 @@ export const updateWorkDetails = async (req, res) => {
         // 1. Define allowed fields for work details
         const allowedFields = [
             "reportingAuthority",
+            "primaryReportee",
+            "secondaryReportee",
             "overtime",
             "status",
             "probationPeriod",
@@ -22,7 +24,12 @@ export const updateWorkDetails = async (req, res) => {
 
         allowedFields.forEach(field => {
             if (req.body[field] !== undefined) {
-                updatePayload[field] = req.body[field];
+                // Handle null/empty strings for reportee fields
+                if ((field === 'primaryReportee' || field === 'secondaryReportee' || field === 'reportingAuthority') && (req.body[field] === '' || req.body[field] === null)) {
+                    updatePayload[field] = null;
+                } else {
+                    updatePayload[field] = req.body[field];
+                }
             }
         });
 

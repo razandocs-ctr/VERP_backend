@@ -4,11 +4,16 @@ import EmployeeContact from "../models/EmployeeContact.js";
 import EmployeePersonal from "../models/EmployeePersonal.js";
 import EmployeePassport from "../models/EmployeePassport.js";
 import EmployeeVisa from "../models/EmployeeVisa.js";
+import EmployeeEmiratesId from "../models/EmployeeEmiratesId.js";
+import EmployeeLabourCard from "../models/EmployeeLabourCard.js";
+import EmployeeMedicalInsurance from "../models/EmployeeMedicalInsurance.js";
+import EmployeeDrivingLicense from "../models/EmployeeDrivingLicense.js";
 import EmployeeSalary from "../models/EmployeeSalary.js";
 import EmployeeBank from "../models/EmployeeBank.js";
 import EmployeeEducation from "../models/EmployeeEducation.js";
 import EmployeeExperience from "../models/EmployeeExperience.js";
 import EmployeeEmergencyContact from "../models/EmployeeEmergencyContact.js";
+import EmployeeTraining from "../models/EmployeeTraining.js";
 
 /**
  * Get complete employee data by ID (can be _id or employeeId)
@@ -23,11 +28,15 @@ export const getCompleteEmployee = async (id) => {
             // It's an ObjectId
             employeeBasic = await EmployeeBasic.findById(id)
                 .populate('reportingAuthority', 'firstName lastName employeeId')
+                .populate('primaryReportee', 'firstName lastName employeeId')
+                .populate('secondaryReportee', 'firstName lastName employeeId')
                 .lean();
         } else {
             // It's an employeeId (string)
             employeeBasic = await EmployeeBasic.findOne({ employeeId: id })
                 .populate('reportingAuthority', 'firstName lastName employeeId')
+                .populate('primaryReportee', 'firstName lastName employeeId')
+                .populate('secondaryReportee', 'firstName lastName employeeId')
                 .lean();
         }
 
@@ -43,21 +52,31 @@ export const getCompleteEmployee = async (id) => {
             personal,
             passport,
             visa,
+            emiratesId,
+            labourCard,
+            medicalInsurance,
+            drivingLicense,
             salary,
             bank,
             education,
             experience,
-            emergencyContact
+            emergencyContact,
+            training
         ] = await Promise.all([
             EmployeeContact.findOne({ employeeId }).lean(),
             EmployeePersonal.findOne({ employeeId }).lean(),
             EmployeePassport.findOne({ employeeId }).lean(),
             EmployeeVisa.findOne({ employeeId }).lean(),
+            EmployeeEmiratesId.findOne({ employeeId }).lean(),
+            EmployeeLabourCard.findOne({ employeeId }).lean(),
+            EmployeeMedicalInsurance.findOne({ employeeId }).lean(),
+            EmployeeDrivingLicense.findOne({ employeeId }).lean(),
             EmployeeSalary.findOne({ employeeId }).lean(),
             EmployeeBank.findOne({ employeeId }).lean(),
             EmployeeEducation.findOne({ employeeId }).lean(),
             EmployeeExperience.findOne({ employeeId }).lean(),
             EmployeeEmergencyContact.findOne({ employeeId }).lean(),
+            EmployeeTraining.findOne({ employeeId }).lean(),
         ]);
 
         // Combine all data into a single object
@@ -85,6 +104,7 @@ export const getCompleteEmployee = async (id) => {
                 dateOfBirth: personal.dateOfBirth,
                 age: personal.age,
                 maritalStatus: personal.maritalStatus,
+                numberOfDependents: personal.numberOfDependents,
                 nationality: personal.nationality,
                 fathersName: personal.fathersName,
             }),
@@ -111,9 +131,26 @@ export const getCompleteEmployee = async (id) => {
                     spouse: visa.spouse,
                 },
             }),
+            // Emirates ID details
+            ...(emiratesId && {
+                emiratesIdDetails: emiratesId.emiratesId,
+            }),
+            // Labour Card details
+            ...(labourCard && {
+                labourCardDetails: labourCard.labourCard,
+            }),
+            // Medical Insurance details
+            ...(medicalInsurance && {
+                medicalInsuranceDetails: medicalInsurance.medicalInsurance,
+            }),
+            // Driving License details
+            ...(drivingLicense && {
+                drivingLicenceDetails: drivingLicense.drivingLicenceDetails,
+            }),
             // Salary details
             ...(salary && {
                 monthlySalary: salary.monthlySalary,
+                totalSalary: salary.totalSalary || salary.monthlySalary, // Use totalSalary from DB, fallback to monthlySalary
                 basic: salary.basic,
                 basicPercentage: salary.basicPercentage,
                 houseRentAllowance: salary.houseRentAllowance,
@@ -122,6 +159,7 @@ export const getCompleteEmployee = async (id) => {
                 otherAllowancePercentage: salary.otherAllowancePercentage,
                 additionalAllowances: salary.additionalAllowances || [],
                 salaryHistory: salary.salaryHistory || [],
+                offerLetter: salary.offerLetter,
             }),
             // Bank details
             ...(bank && {
@@ -131,6 +169,7 @@ export const getCompleteEmployee = async (id) => {
                 ibanNumber: bank.ibanNumber,
                 swiftCode: bank.swiftCode,
                 bankOtherDetails: bank.bankOtherDetails,
+                bankAttachment: bank.bankAttachment,
             }),
             // Education details
             ...(education && {
@@ -146,6 +185,10 @@ export const getCompleteEmployee = async (id) => {
                 emergencyContactName: emergencyContact.emergencyContactName,
                 emergencyContactRelation: emergencyContact.emergencyContactRelation,
                 emergencyContactNumber: emergencyContact.emergencyContactNumber,
+            }),
+            // Training details
+            ...(training && {
+                trainingDetails: training.trainingDetails || [],
             }),
         };
 
@@ -175,7 +218,7 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
             'employeeId', 'firstName', 'lastName', 'role', 'department', 'designation',
             'status', 'probationPeriod', 'reportingAuthority', 'overtime',
             'profileApprovalStatus', 'profileStatus', 'email', 'password',
-            'enablePortalAccess', 'dateOfJoining', 'profilePicture'
+            'enablePortalAccess', 'dateOfJoining', 'profilePicture', 'documents', 'trainingDetails'
         ];
 
         const contactFields = [
@@ -185,7 +228,7 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
         ];
 
         const personalFields = [
-            'gender', 'dateOfBirth', 'age', 'maritalStatus', 'nationality', 'fathersName'
+            'gender', 'dateOfBirth', 'age', 'maritalStatus', 'numberOfDependents', 'nationality', 'fathersName'
         ];
 
         const passportFields = [
@@ -195,12 +238,12 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
         const salaryFields = [
             'monthlySalary', 'basic', 'basicPercentage', 'houseRentAllowance',
             'houseRentPercentage', 'otherAllowance', 'otherAllowancePercentage',
-            'additionalAllowances', 'salaryHistory'
+            'additionalAllowances', 'salaryHistory', 'offerLetter'
         ];
 
         const bankFields = [
             'bankName', 'accountName', 'accountNumber', 'ibanNumber',
-            'swiftCode', 'bankOtherDetails'
+            'swiftCode', 'bankOtherDetails', 'bankAttachment'
         ];
 
         // Separate fields by collection
@@ -271,6 +314,54 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
         }
 
         if (Object.keys(salaryUpdate).length > 0) {
+            // Calculate total salary if salary fields are being updated
+            if (salaryUpdate.salaryHistory && Array.isArray(salaryUpdate.salaryHistory)) {
+                // Calculate total salary for each history entry
+                salaryUpdate.salaryHistory = salaryUpdate.salaryHistory.map(entry => {
+                    const basic = parseFloat(entry.basic) || 0;
+                    const houseRentAllowance = parseFloat(entry.houseRentAllowance) || 0;
+                    const otherAllowance = parseFloat(entry.otherAllowance) || 0;
+                    const vehicleAllowance = parseFloat(entry.vehicleAllowance) || 0;
+                    const fuelAllowance = parseFloat(entry.fuelAllowance) || 0;
+                    // Calculate additional allowances excluding vehicle and fuel (already counted separately)
+                    const additionalAllowances = Array.isArray(entry.additionalAllowances) 
+                        ? entry.additionalAllowances
+                            .filter(item => !item.type?.toLowerCase().includes('vehicle') && !item.type?.toLowerCase().includes('fuel'))
+                            .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
+                        : 0;
+                    
+                    const totalSalary = basic + houseRentAllowance + otherAllowance + vehicleAllowance + fuelAllowance + additionalAllowances;
+                    
+                    return {
+                        ...entry,
+                        totalSalary: totalSalary,
+                        // Include all allowances in the entry
+                        houseRentAllowance: houseRentAllowance,
+                        vehicleAllowance: vehicleAllowance,
+                        fuelAllowance: fuelAllowance,
+                        additionalAllowances: entry.additionalAllowances || []
+                    };
+                });
+            }
+            
+            // Also calculate total for current salary if basic/otherAllowance/houseRentAllowance are being updated
+            if (salaryUpdate.basic !== undefined || salaryUpdate.otherAllowance !== undefined || 
+                salaryUpdate.houseRentAllowance !== undefined || salaryUpdate.additionalAllowances !== undefined) {
+                // Get current salary record to calculate total
+                const currentSalary = await EmployeeSalary.findOne({ employeeId }).lean();
+                const basic = parseFloat(salaryUpdate.basic !== undefined ? salaryUpdate.basic : (currentSalary?.basic || 0)) || 0;
+                const houseRentAllowance = parseFloat(salaryUpdate.houseRentAllowance !== undefined ? salaryUpdate.houseRentAllowance : (currentSalary?.houseRentAllowance || 0)) || 0;
+                const otherAllowance = parseFloat(salaryUpdate.otherAllowance !== undefined ? salaryUpdate.otherAllowance : (currentSalary?.otherAllowance || 0)) || 0;
+                const additionalAllowances = salaryUpdate.additionalAllowances || currentSalary?.additionalAllowances || [];
+                const additionalTotal = Array.isArray(additionalAllowances) 
+                    ? additionalAllowances.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
+                    : 0;
+                
+                const calculatedTotal = basic + houseRentAllowance + otherAllowance + additionalTotal;
+                salaryUpdate.monthlySalary = calculatedTotal;
+                salaryUpdate.totalSalary = calculatedTotal; // Store totalSalary in DB
+            }
+            
             updatePromises.push(
                 EmployeeSalary.findOneAndUpdate(
                     { employeeId },
@@ -314,16 +405,19 @@ export const deleteEmployeeData = async (employeeId) => {
             EmployeePersonal.findOneAndDelete({ employeeId }),
             EmployeePassport.findOneAndDelete({ employeeId }),
             EmployeeVisa.findOneAndDelete({ employeeId }),
+            EmployeeEmiratesId.findOneAndDelete({ employeeId }),
             EmployeeSalary.findOneAndDelete({ employeeId }),
             EmployeeBank.findOneAndDelete({ employeeId }),
             EmployeeEducation.findOneAndDelete({ employeeId }),
             EmployeeExperience.findOneAndDelete({ employeeId }),
             EmployeeEmergencyContact.findOneAndDelete({ employeeId }),
+            EmployeeTraining.findOneAndDelete({ employeeId }),
         ]);
     } catch (error) {
         console.error('Error in deleteEmployeeData:', error);
         throw error;
     }
 };
+
 
 

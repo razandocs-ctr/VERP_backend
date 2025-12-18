@@ -32,6 +32,7 @@ export const updateBasicDetails = async (req, res) => {
             "swiftCode",
             "ifscCode",
             "bankOtherDetails",
+            "bankAttachment",
             "addressLine1",
             "addressLine2",
             "city",
@@ -45,6 +46,7 @@ export const updateBasicDetails = async (req, res) => {
             "currentPostalCode",
             "dateOfBirth",
             "maritalStatus",
+            "numberOfDependents",
             "fathersName",
             "gender",
             "emergencyContactName",
@@ -55,7 +57,10 @@ export const updateBasicDetails = async (req, res) => {
             "otherAllowance",
             "additionalAllowances",
             "salaryHistory",
-            "profilePicture"
+            "offerLetter",
+            "profilePicture",
+            "documents",
+            "trainingDetails"
         ];
 
         // 2. Build updatePayload

@@ -1,4 +1,5 @@
 import EmployeeBasic from "../../models/EmployeeBasic.js";
+import EmployeeVisa from "../../models/EmployeeVisa.js";
 
 // Get all employees (lightweight list response with optional pagination)
 export const getEmployees = async (req, res) => {
@@ -36,9 +37,27 @@ export const getEmployees = async (req, res) => {
             EmployeeBasic.countDocuments(filters),
         ]);
 
+        // Populate visa details for each employee
+        const employeeIds = employees.map(emp => emp.employeeId);
+        const visas = await EmployeeVisa.find({ employeeId: { $in: employeeIds } }).lean();
+        const visaMap = {};
+        visas.forEach(visa => {
+            visaMap[visa.employeeId] = {
+                visit: visa.visit,
+                employment: visa.employment,
+                spouse: visa.spouse,
+            };
+        });
+
+        // Attach visa details to employees
+        const employeesWithVisas = employees.map(emp => ({
+            ...emp,
+            visaDetails: visaMap[emp.employeeId] || null,
+        }));
+
         return res.status(200).json({
             message: "Employees fetched successfully",
-            employees,
+            employees: employeesWithVisas,
             pagination: {
                 page,
                 limit,

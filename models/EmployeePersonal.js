@@ -21,6 +21,7 @@ const employeePersonalSchema = new mongoose.Schema(
         dateOfBirth: { type: Date },
         age: { type: Number },
         maritalStatus: { type: String },
+        numberOfDependents: { type: Number, default: 0 },
         nationality: { type: String },
         fathersName: { type: String },
     },

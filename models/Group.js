@@ -38,7 +38,6 @@ const groupSchema = new mongoose.Schema(
 );
 
 // Indexes
-groupSchema.index({ name: 1 });
 groupSchema.index({ status: 1 });
 groupSchema.index({ users: 1 });
 

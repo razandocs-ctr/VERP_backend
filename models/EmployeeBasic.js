@@ -24,6 +24,8 @@ const employeeBasicSchema = new mongoose.Schema(
             default: null,
         },
         reportingAuthority: { type: mongoose.Schema.Types.ObjectId, ref: "EmployeeBasic", default: null },
+        primaryReportee: { type: mongoose.Schema.Types.ObjectId, ref: "EmployeeBasic", default: null },
+        secondaryReportee: { type: mongoose.Schema.Types.ObjectId, ref: "EmployeeBasic", default: null },
         overtime: { type: Boolean, default: false },
         profileApprovalStatus: {
             type: String,
@@ -46,6 +48,35 @@ const employeeBasicSchema = new mongoose.Schema(
 
         // PROFILE PICTURE
         profilePicture: { type: String }, // Cloudinary URL
+
+        // DOCUMENTS
+        documents: [
+            {
+                type: { type: String },
+                description: { type: String },
+                document: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
+
+        // TRAINING DETAILS
+        trainingDetails: [
+            {
+                trainingName: { type: String },
+                trainingDetails: { type: String },
+                trainingFrom: { type: String },
+                trainingDate: { type: Date },
+                trainingCost: { type: Number },
+                certificate: {
+                    data: { type: String },
+                    name: { type: String },
+                    mimeType: { type: String }
+                }
+            }
+        ],
     },
     { timestamps: true }
 );
@@ -56,5 +87,8 @@ employeeBasicSchema.index({ department: 1 });
 employeeBasicSchema.index({ status: 1 });
 
 export default mongoose.model("EmployeeBasic", employeeBasicSchema);
+
+
+
 
 

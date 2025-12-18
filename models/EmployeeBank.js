@@ -19,6 +19,11 @@ const employeeBankSchema = new mongoose.Schema(
         ibanNumber: { type: String },
         swiftCode: { type: String },
         bankOtherDetails: { type: String },
+        bankAttachment: {
+            data: { type: String },
+            name: { type: String },
+            mimeType: { type: String },
+        },
     },
     { timestamps: true }
 );
