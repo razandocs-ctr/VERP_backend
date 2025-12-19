@@ -13,73 +13,93 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: "Email/Username and Password are required" });
 
         const emailOrUsername = email.trim();
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        const adminPassword = process.env.ADMIN_PASSWORD || 'IT20!!@Erp';
 
-        // Find user by email or username and check if portal access is enabled
-        let user = await User.findOne({
-            $or: [
-                { email: emailOrUsername.toLowerCase() },
-                { username: emailOrUsername }
-            ],
-            status: 'Active',
-            enablePortalAccess: true
-        });
+        // Check if this is the admin user from .env
+        const isAdminLogin = emailOrUsername.toLowerCase() === adminUsername.toLowerCase() && password === adminPassword;
 
-        if (!user)
-            return res.status(404).json({ message: "User not found or portal access not enabled" });
+        let user;
+        let isSystemAdmin = false;
 
-        // Check if password exists
-        if (!user.password) {
-            return res.status(401).json({ message: "Password not set for this user" });
-        }
+        if (isAdminLogin) {
+            // This is the system admin - check if user exists, if not create it
+            user = await User.findOne({
+                $or: [
+                    { username: adminUsername.toLowerCase() },
+                    { email: 'verp@vitsllc.com' }
+                ]
+            });
 
-        // Compare password
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword)
-            return res.status(401).json({ message: "Invalid credentials" });
+            if (!user) {
+                // Create admin user if it doesn't exist
+                const hashedPassword = await bcrypt.hash(adminPassword, 10);
+                const passwordExpiryDate = new Date();
+                passwordExpiryDate.setDate(passwordExpiryDate.getDate() + 180);
 
-        // Special case: username "admin" should always have admin access
-        if (user.username.toLowerCase() === 'admin' && !user.isAdmin) {
-            user.isAdmin = true;
-            await user.save();
-            console.log(`Updated user ${user._id} (username: admin) to admin status`);
-            // Reload user to ensure isAdmin is updated
-            user = await User.findById(user._id);
-        }
-
-        // Check if user should be admin based on employee department/designation
-        // Update isAdmin field if needed (for existing users)
-        if (user.employeeId && !user.isAdmin) {
-            const employee = await EmployeeBasic.findOne({ employeeId: user.employeeId })
-                .select('designation department')
-                .lean();
-
-            if (employee) {
-                const isAdminByDepartment = employee.department &&
-                    (employee.department.toLowerCase() === 'administrator' ||
-                        employee.department.toLowerCase() === 'administration');
-                const isAdminByDesignation = employee.designation &&
-                    (employee.designation.toLowerCase() === 'administrator' ||
-                        employee.designation.toLowerCase() === 'admin manager');
-
-                const isAdminManager = employee.designation &&
-                    employee.designation.toLowerCase() === 'admin manager' &&
-                    employee.department &&
-                    (employee.department.toLowerCase() === 'administrator' ||
-                        employee.department.toLowerCase() === 'administration');
-
-                if (isAdminByDepartment || isAdminByDesignation || isAdminManager) {
-                    // Update user to set isAdmin = true
-                    user.isAdmin = true;
-                    await user.save();
-                    console.log(`Updated user ${user._id} to admin status based on employee data`);
-                    // Reload user to ensure isAdmin is updated
-                    user = await User.findById(user._id);
+                user = new User({
+                    username: adminUsername.toLowerCase(),
+                    name: 'Super User(System)',
+                    email: 'verp@vitsllc.com',
+                    password: hashedPassword,
+                    employeeId: null,
+                    group: null,
+                    groupName: null,
+                    status: 'Active',
+                    enablePortalAccess: true,
+                    passwordExpiryDate: passwordExpiryDate,
+                });
+                await user.save();
+                console.log('System admin user created');
+            } else {
+                // Update admin user details if they exist but don't match
+                if (user.username !== adminUsername.toLowerCase()) {
+                    user.username = adminUsername.toLowerCase();
                 }
+                if (user.name !== 'Super User(System)') {
+                    user.name = 'Super User(System)';
+                }
+                if (user.email !== 'verp@vitsllc.com') {
+                    user.email = 'verp@vitsllc.com';
+                }
+                if (user.employeeId !== null) {
+                    user.employeeId = null;
+                }
+                // Update password if it doesn't match
+                const passwordMatches = await bcrypt.compare(adminPassword, user.password);
+                if (!passwordMatches) {
+                    user.password = await bcrypt.hash(adminPassword, 10);
+                }
+                await user.save();
             }
+            isSystemAdmin = true;
+        } else {
+            // Regular user login
+            user = await User.findOne({
+                $or: [
+                    { email: emailOrUsername.toLowerCase() },
+                    { username: emailOrUsername }
+                ],
+                status: 'Active',
+                enablePortalAccess: true
+            });
+
+            if (!user)
+                return res.status(404).json({ message: "User not found or portal access not enabled" });
+
+            // Check if password exists
+            if (!user.password) {
+                return res.status(401).json({ message: "Password not set for this user" });
+            }
+
+            // Compare password
+            const validPassword = await bcrypt.compare(password, user.password);
+            if (!validPassword)
+                return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        // Get user permissions (this will check isAdmin field)
-        const permissionData = await getUserPermissions(user._id);
+        // Get user permissions (for system admin, this will return all permissions)
+        const permissionData = await getUserPermissions(user._id, isSystemAdmin);
 
         // Extract permissions object from the response
         const permissions = permissionData?.permissions || {};
@@ -103,10 +123,12 @@ export const login = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 username: user.username,
+                isAdmin: isSystemAdmin,
+                isAdministrator: isSystemAdmin
             },
             permissions: permissions,
-            isAdmin: permissionData?.isAdmin || false,
-            isAdministrator: permissionData?.isAdministrator || false,
+            isAdmin: isSystemAdmin || permissionData?.isAdmin || false,
+            isAdministrator: isSystemAdmin || permissionData?.isAdministrator || false,
             expiresIn: "2h"
         });
     } catch (error) {

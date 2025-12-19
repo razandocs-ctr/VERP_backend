@@ -24,6 +24,32 @@ export const updateUser = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
+        // Check if this is the system admin user
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
+
+        // For system admin, only allow password updates
+        if (isSystemAdmin) {
+            if (password === undefined) {
+                return res.status(400).json({ 
+                    message: "Only password can be updated for system admin user" 
+                });
+            }
+            // Only update password for admin user
+            const isSamePassword = await bcrypt.compare(password, user.password);
+            if (isSamePassword) {
+                return res.status(400).json({
+                    message: "New password must be different from the current password"
+                });
+            }
+            user.password = await bcrypt.hash(password, 10);
+            await user.save();
+            return res.status(200).json({
+                message: "Password updated successfully",
+                user: await User.findById(id).select('-password').populate('group', 'name')
+            });
+        }
+
         // Build update object
         const updateData = {};
 

@@ -20,6 +20,10 @@ export const getUserById = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
+        // Check if this is the system admin user
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
+
         // If user has employeeId, fetch employee details including designation
         let employee = null;
         let designation = null;
@@ -37,13 +41,15 @@ export const getUserById = async (req, res) => {
         }
 
         // Get user permissions
-        const permissions = await getUserPermissions(id);
+        const permissions = await getUserPermissions(id, isSystemAdmin);
 
         const userResponse = {
             ...user.toObject(),
             employee: employee,
             designation: designation,
-            permissions: permissions
+            permissions: permissions,
+            // For system admin, show "System Users" instead of employeeId
+            employeeId: isSystemAdmin ? 'System Users' : (user.employeeId || null)
         };
 
         return res.status(200).json({

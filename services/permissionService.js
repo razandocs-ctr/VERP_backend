@@ -4,11 +4,11 @@ import Group from "../models/Group.js";
 
 /**
  * Get user permissions
- * - Administrator users get all permissions automatically
- * - Users without a group get no permissions (unless Administrator)
+ * - System admin (username from .env) gets all permissions automatically
+ * - Users without a group get no permissions (unless System Admin)
  * - Users with a group get permissions from that group
  */
-export const getUserPermissions = async (userId) => {
+export const getUserPermissions = async (userId, isSystemAdmin = false) => {
     try {
         const user = await User.findById(userId)
             .populate('group', 'permissions')
@@ -18,11 +18,11 @@ export const getUserPermissions = async (userId) => {
             return null;
         }
 
-        // Check if user is Admin - ONLY check isAdmin field, not employee designation/department
-        // The isAdmin field should be set when creating the user based on employee designation/department
-        const isAdministrator = user.isAdmin === true;
+        // Check if user is System Admin (username matches ADMIN_USERNAME from .env)
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        const isAdministrator = isSystemAdmin || user.username.toLowerCase() === adminUsername.toLowerCase();
 
-        // Admin gets all permissions automatically
+        // System Admin gets all permissions automatically
         if (isAdministrator) {
             return {
                 isAdministrator: true,
@@ -316,21 +316,22 @@ const getAllPermissions = () => {
 };
 
 /**
- * Check if user is Administrator
- * Only checks the isAdmin field in the User model
+ * Check if user is System Administrator
+ * Checks if username matches ADMIN_USERNAME from .env
  */
 export const isUserAdministrator = async (userId) => {
     try {
         const user = await User.findById(userId)
-            .select('isAdmin')
+            .select('username')
             .lean();
 
         if (!user) {
             return false;
         }
 
-        // Only check isAdmin field - this should be set when user is created
-        return user.isAdmin === true;
+        // Check if username matches admin username from .env
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        return user.username.toLowerCase() === adminUsername.toLowerCase();
     } catch (error) {
         console.error('Error checking if user is administrator:', error);
         return false;

@@ -30,6 +30,10 @@ export const getUsers = async (req, res) => {
             ];
         }
 
+        // Exclude system admin user from list
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        filters.username = { $ne: adminUsername.toLowerCase() };
+
         // Get users with populated group
         const [users, total] = await Promise.all([
             User.find(filters)
