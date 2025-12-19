@@ -33,17 +33,18 @@ export const updateGroup = async (req, res) => {
         if (status !== undefined) updateData.status = status;
 
         // Handle users update
-        if (users !== undefined) {
-            // Remove all users from this group first
-            await User.updateMany(
-                { group: id },
-                { $set: { group: null, groupName: null } }
-            );
-
+        // Only update users if explicitly provided and not empty
+        // If users is empty array or not provided, preserve existing users
+        if (users !== undefined && users !== null && Array.isArray(users)) {
             let normalizedUserIds = [];
 
-            // Assign new users to this group
-            if (users && users.length > 0) {
+            // Only process if users array is not empty
+            if (users.length > 0) {
+                // Remove all users from this group first (only if we're assigning new users)
+                await User.updateMany(
+                    { group: id },
+                    { $set: { group: null, groupName: null } }
+                );
                 // Normalize users array - extract IDs if they're objects
                 normalizedUserIds = users.map(user => {
                     // If it's already a string, use it directly
@@ -102,10 +103,21 @@ export const updateGroup = async (req, res) => {
                         }
                     }
                 );
-            }
 
-            // Normalize users array for storage
-            updateData.users = normalizedUserIds;
+                // Normalize users array for storage
+                updateData.users = normalizedUserIds;
+            } else {
+                // If users array is empty, preserve existing users - don't update the users field
+                // This means existing users will keep their group assignment
+                // Sync the Group model's users array with actual users having this group
+                const existingUsers = await User.find({ group: id }).select('_id').lean();
+                updateData.users = existingUsers.map(u => u._id);
+            }
+        } else {
+            // If users is not provided (undefined), preserve existing users
+            // Sync the Group model's users array with actual users having this group
+            const existingUsers = await User.find({ group: id }).select('_id').lean();
+            updateData.users = existingUsers.map(u => u._id);
         }
 
         const updatedGroup = await Group.findByIdAndUpdate(

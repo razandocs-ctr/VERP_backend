@@ -73,7 +73,8 @@ export const getUserPermissions = async (userId) => {
 };
 
 /**
- * Convert permissions from old format (full, create, view, edit, delete) to new format (isActive, isCreate, isEdit, isDelete)
+ * Convert permissions from old format (full, create, view, edit, delete) to new format (isView, isCreate, isEdit, isDelete, isDownload)
+ * Supports both isActive (old) and isView (new) for backward compatibility
  */
 const convertPermissionsFormat = (permissions) => {
     const converted = {};
@@ -81,21 +82,40 @@ const convertPermissionsFormat = (permissions) => {
     Object.keys(permissions).forEach(moduleId => {
         const oldPerm = permissions[moduleId];
 
-        // Check if already in new format
-        if (oldPerm && oldPerm.hasOwnProperty('isActive')) {
+        // Check if already in new format (isView)
+        if (oldPerm && oldPerm.hasOwnProperty('isView')) {
             converted[moduleId] = {
-                isActive: oldPerm.isActive ?? false,
+                isView: oldPerm.isView ?? false,
                 isCreate: oldPerm.isCreate ?? false,
                 isEdit: oldPerm.isEdit ?? false,
-                isDelete: oldPerm.isDelete ?? false
+                isDelete: oldPerm.isDelete ?? false,
+                isDownload: oldPerm.isDownload ?? false,
+                // Also set isActive for backward compatibility
+                isActive: oldPerm.isView ?? false
             };
-        } else if (oldPerm) {
-            // Convert from old format
+        } 
+        // Check if in old new format (isActive)
+        else if (oldPerm && oldPerm.hasOwnProperty('isActive')) {
             converted[moduleId] = {
-                isActive: oldPerm.full || oldPerm.view || false,
+                isView: oldPerm.isActive ?? false,
+                isCreate: oldPerm.isCreate ?? false,
+                isEdit: oldPerm.isEdit ?? false,
+                isDelete: oldPerm.isDelete ?? false,
+                isDownload: oldPerm.isDownload ?? false,
+                // Keep isActive for backward compatibility
+                isActive: oldPerm.isActive ?? false
+            };
+        } 
+        // Convert from very old format (full, create, view, edit, delete)
+        else if (oldPerm) {
+            converted[moduleId] = {
+                isView: oldPerm.full || oldPerm.view || false,
                 isCreate: oldPerm.full || oldPerm.create || false,
                 isEdit: oldPerm.full || oldPerm.edit || false,
-                isDelete: oldPerm.full || oldPerm.delete || false
+                isDelete: oldPerm.full || oldPerm.delete || false,
+                isDownload: oldPerm.download || false,
+                // Also set isActive for backward compatibility
+                isActive: oldPerm.full || oldPerm.view || false
             };
         }
     });
@@ -103,12 +123,15 @@ const convertPermissionsFormat = (permissions) => {
     // Ensure dashboard is always active
     if (!converted.dashboard) {
         converted.dashboard = {
-            isActive: true,
+            isView: true,
             isCreate: false,
             isEdit: false,
-            isDelete: false
+            isDelete: false,
+            isDownload: false,
+            isActive: true
         };
     } else {
+        converted.dashboard.isView = true;
         converted.dashboard.isActive = true;
     }
 
@@ -141,14 +164,15 @@ export const hasPermission = async (userId, moduleId, permissionType) => {
         return false;
     }
 
-    // First check if module is active (isActive must be true)
-    if (!modulePermission.isActive) {
+    // First check if module has View permission (isView or isActive must be true)
+    const hasView = modulePermission.isView === true || modulePermission.isActive === true;
+    if (!hasView) {
         return false;
     }
 
-    // For isActive check, just return the isActive value
-    if (permissionType === 'isActive' || permissionType === 'view') {
-        return modulePermission.isActive === true;
+    // For isView/isActive check, just return the View value
+    if (permissionType === 'isView' || permissionType === 'isActive' || permissionType === 'view') {
+        return hasView;
     }
 
     // Map old permission types to new ones for backward compatibility
@@ -198,8 +222,13 @@ const MODULES_STRUCTURE = [
                             { id: 'hrm_employees_view_experience', label: 'Experience', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_work', label: 'Work Details', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_salary', label: 'Salary', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_salary_history', label: 'Salary History', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_bank', label: 'Bank Details', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_emergency', label: 'Emergency Contacts', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_permanent_address', label: 'Permanent Address', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_current_address', label: 'Current Address', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_documents', label: 'Documents', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_training', label: 'Training Details', parent: 'hrm_employees_view' },
                         ]
                     }
                 ]
@@ -219,7 +248,17 @@ const MODULES_STRUCTURE = [
         label: 'Settings',
         parent: null,
         children: [
-            { id: 'settings_user_group', label: 'Create User & Group', parent: 'settings' }
+            { 
+                id: 'settings_user_group', 
+                label: 'Create User & Group', 
+                parent: 'settings',
+                children: [
+                    { id: 'settings_user_group_create', label: 'Create', parent: 'settings_user_group' },
+                    { id: 'settings_user_group_edit', label: 'Edit', parent: 'settings_user_group' },
+                    { id: 'settings_user_group_delete', label: 'Delete', parent: 'settings_user_group' },
+                    { id: 'settings_user_group_view', label: 'View', parent: 'settings_user_group' },
+                ]
+            }
         ]
     },
 ];
@@ -253,19 +292,24 @@ const getAllPermissions = () => {
     // Set all permissions to true for each module/session
     allModuleIds.forEach(moduleId => {
         permissions[moduleId] = {
-            isActive: true,
+            isView: true,
             isCreate: true,
             isEdit: true,
-            isDelete: true
+            isDelete: true,
+            isDownload: true,
+            // Also set isActive for backward compatibility
+            isActive: true
         };
     });
 
     // Dashboard is always active (but not necessarily create/edit/delete)
     permissions.dashboard = {
-        isActive: true,
+        isView: true,
         isCreate: false,
         isEdit: false,
-        isDelete: false
+        isDelete: false,
+        isDownload: false,
+        isActive: true
     };
 
     return permissions;
