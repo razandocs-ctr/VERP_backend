@@ -15,7 +15,7 @@ export const login = async (req, res) => {
         const emailOrUsername = email.trim();
 
         // Find user by email or username and check if portal access is enabled
-        const user = await User.findOne({
+        let user = await User.findOne({
             $or: [
                 { email: emailOrUsername.toLowerCase() },
                 { username: emailOrUsername }
@@ -36,6 +36,15 @@ export const login = async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword)
             return res.status(401).json({ message: "Invalid credentials" });
+
+        // Special case: username "admin" should always have admin access
+        if (user.username.toLowerCase() === 'admin' && !user.isAdmin) {
+            user.isAdmin = true;
+            await user.save();
+            console.log(`Updated user ${user._id} (username: admin) to admin status`);
+            // Reload user to ensure isAdmin is updated
+            user = await User.findById(user._id);
+        }
 
         // Check if user should be admin based on employee department/designation
         // Update isAdmin field if needed (for existing users)
@@ -63,11 +72,13 @@ export const login = async (req, res) => {
                     user.isAdmin = true;
                     await user.save();
                     console.log(`Updated user ${user._id} to admin status based on employee data`);
+                    // Reload user to ensure isAdmin is updated
+                    user = await User.findById(user._id);
                 }
             }
         }
 
-        // Get user permissions
+        // Get user permissions (this will check isAdmin field)
         const permissionData = await getUserPermissions(user._id);
 
         // Extract permissions object from the response
