@@ -2,14 +2,12 @@ import mongoose from "mongoose";
 
 /**
  * EmployeeDrivingLicense - Driving License details
- * Contains: Number, Issue Date, Emirates Issue Date, Issue Country, Expiry Date, Attachment
+ * Contains: Number, Issue Date, Expiry Date, Attachment
  */
 const drivingLicenseDocumentSchema = new mongoose.Schema(
     {
         number: { type: String },
         issueDate: { type: Date },
-        emiratesIssueDate: { type: String }, // Text field, not a date
-        issueCountry: { type: String },
         expiryDate: { type: Date },
         document: {
             data: { type: String },

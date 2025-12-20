@@ -1,7 +1,7 @@
 import EmployeeDrivingLicense from "../../models/EmployeeDrivingLicense.js";
 import { getCompleteEmployee } from "../../services/employeeService.js";
 
-const REQUIRED_FIELDS = ["number", "issueDate", "emiratesIssueDate", "issueCountry", "expiryDate", "document"];
+const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "document"];
 
 const buildMissingFields = (body) => {
     return REQUIRED_FIELDS.filter((field) => {
@@ -24,15 +24,13 @@ export const updateDrivingLicenseDetails = async (req, res) => {
     const {
         number,
         issueDate,
-        emiratesIssueDate,
-        issueCountry,
         expiryDate,
         document,
         documentName,
         documentMime,
     } = req.body || {};
 
-    const missingFields = buildMissingFields({ number, issueDate, emiratesIssueDate, issueCountry, expiryDate, document });
+    const missingFields = buildMissingFields({ number, issueDate, expiryDate, document });
     if (missingFields.length > 0) {
         return res.status(400).json({
             message: "Missing required Driving License fields.",
@@ -48,20 +46,6 @@ export const updateDrivingLicenseDetails = async (req, res) => {
         });
     }
 
-    // Validate emiratesIssueDate is not empty (it's a text field)
-    if (!emiratesIssueDate || emiratesIssueDate.trim() === '') {
-        return res.status(400).json({
-            message: "Issue Emirates is required.",
-        });
-    }
-
-    // Validate issueCountry is not empty
-    if (!issueCountry || issueCountry.trim() === '') {
-        return res.status(400).json({
-            message: "Issue Country is required.",
-        });
-    }
-
     try {
         // Get employeeId from employee record
         const employee = await getCompleteEmployee(id);
@@ -74,8 +58,6 @@ export const updateDrivingLicenseDetails = async (req, res) => {
         const drivingLicensePayload = {
             number: number.trim(),
             issueDate: parsedIssueDate,
-            emiratesIssueDate: emiratesIssueDate.trim(),
-            issueCountry: issueCountry.trim(),
             expiryDate: parsedExpiryDate,
             document: document
                 ? {

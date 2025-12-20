@@ -56,15 +56,15 @@ export const updateEmiratesIdDetails = async (req, res) => {
         const employeeId = employee.employeeId;
 
         const emiratesIdPayload = {
-            number: number,
+            number: number.trim(),
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
             document: upload
                 ? {
-                      data: upload,
-                      name: uploadName || "",
-                      mimeType: uploadMime || "",
-                  }
+                    data: upload,
+                    name: uploadName || "",
+                    mimeType: uploadMime || "",
+                }
                 : undefined,
             lastUpdated: new Date(),
         };
