@@ -11,6 +11,13 @@ export const deleteGroup = async (req, res) => {
             return res.status(404).json({ message: "Group not found" });
         }
 
+        // Prevent deletion of system groups (like Admin)
+        if (group.isSystemGroup) {
+            return res.status(403).json({ 
+                message: "Cannot delete system group. This group is protected and cannot be deleted." 
+            });
+        }
+
         // Remove group reference from all users assigned to this group
         await User.updateMany(
             { group: id },

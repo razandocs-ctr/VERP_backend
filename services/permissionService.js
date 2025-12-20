@@ -229,6 +229,10 @@ const MODULES_STRUCTURE = [
                             { id: 'hrm_employees_view_current_address', label: 'Current Address', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_documents', label: 'Documents', parent: 'hrm_employees_view' },
                             { id: 'hrm_employees_view_training', label: 'Training Details', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_emirates_id', label: 'Emirates ID', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_labour_card', label: 'Labour Card', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_medical_insurance', label: 'Medical Insurance', parent: 'hrm_employees_view' },
+                            { id: 'hrm_employees_view_driving_license', label: 'Driving License', parent: 'hrm_employees_view' },
                         ]
                     }
                 ]
@@ -283,7 +287,7 @@ const getAllModuleIds = (modules) => {
  * Get all possible permissions (for Administrator)
  * Returns permissions for all modules/sessions with all permission types enabled
  */
-const getAllPermissions = () => {
+export const getAllPermissions = () => {
     // Get all module IDs from the hierarchical structure
     const allModuleIds = getAllModuleIds(MODULES_STRUCTURE);
 

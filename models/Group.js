@@ -31,6 +31,12 @@ const groupSchema = new mongoose.Schema(
             default: "Active"
         },
 
+        // System group flag - marks default groups that cannot be deleted or modified
+        isSystemGroup: {
+            type: Boolean,
+            default: false
+        },
+
         // Metadata
         createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     },

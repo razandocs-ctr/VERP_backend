@@ -1,15 +1,35 @@
 import Group from "../../models/Group.js";
 import User from "../../models/User.js";
+import { isUserAdministrator } from "../../services/permissionService.js";
 
 // Update group
 export const updateGroup = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, users, permissions, status } = req.body;
+        const userId = req.user?.id;
 
         const group = await Group.findById(id);
         if (!group) {
             return res.status(404).json({ message: "Group not found" });
+        }
+
+        // Check if this is a system group (like Admin)
+        if (group.isSystemGroup) {
+            // Only admin users can modify system groups
+            const isAdmin = await isUserAdministrator(userId);
+            if (!isAdmin) {
+                return res.status(403).json({ 
+                    message: "Cannot modify system group. Only administrators can modify this group." 
+                });
+            }
+
+            // Prevent changing name or isSystemGroup flag for system groups
+            if (name !== undefined && name.trim().toLowerCase() !== group.name.toLowerCase()) {
+                return res.status(403).json({ 
+                    message: "Cannot change the name of a system group." 
+                });
+            }
         }
 
         const updateData = {};
@@ -40,6 +60,15 @@ export const updateGroup = async (req, res) => {
 
             // Only process if users array is not empty
             if (users.length > 0) {
+                // If this is a system group (like Admin), only admin users can assign users to it
+                if (group.isSystemGroup) {
+                    const isAdmin = await isUserAdministrator(userId);
+                    if (!isAdmin) {
+                        return res.status(403).json({ 
+                            message: "Only administrators can assign users to system groups." 
+                        });
+                    }
+                }
                 // Remove all users from this group first (only if we're assigning new users)
                 await User.updateMany(
                     { group: id },

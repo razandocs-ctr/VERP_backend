@@ -1,10 +1,12 @@
 import Group from "../../models/Group.js";
 import User from "../../models/User.js";
+import { isUserAdministrator, getAllPermissions } from "../../services/permissionService.js";
 
 // Create new group
 export const createGroup = async (req, res) => {
     try {
         const { name, users = [], permissions = {}, status = 'Active' } = req.body;
+        const userId = req.user?.id;
 
         if (!name || name.trim() === '') {
             return res.status(400).json({
@@ -12,9 +14,22 @@ export const createGroup = async (req, res) => {
             });
         }
 
+        // Check if trying to create a group named "Admin"
+        const normalizedName = name.trim();
+        const isAdminGroup = normalizedName.toLowerCase() === 'admin';
+        if (isAdminGroup) {
+            // Only admin users can create Admin group
+            const isAdmin = await isUserAdministrator(userId);
+            if (!isAdmin) {
+                return res.status(403).json({ 
+                    message: "Only administrators can create the Admin group." 
+                });
+            }
+        }
+
         // Check if group name already exists
         const existingGroup = await Group.findOne({
-            name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }
+            name: { $regex: new RegExp(`^${normalizedName}$`, 'i') }
         });
         if (existingGroup) {
             return res.status(400).json({ message: "Group name already exists" });
@@ -60,11 +75,15 @@ export const createGroup = async (req, res) => {
             : [];
 
         // Create group with permissions as Map
+        // If creating Admin group, mark it as system group and give it all permissions
+        const groupPermissions = isAdminGroup ? getAllPermissions() : (permissions || {});
+        
         const newGroup = new Group({
             name: name.trim(),
             users: normalizedUsers,
-            permissions: permissions || {},
+            permissions: groupPermissions,
             status: status,
+            isSystemGroup: isAdminGroup
         });
 
         const savedGroup = await newGroup.save();
