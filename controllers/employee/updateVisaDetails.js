@@ -1,5 +1,6 @@
 import EmployeeVisa from "../../models/EmployeeVisa.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
 
 const ALLOWED_VISA_TYPES = ["visit", "employment", "spouse"];
 
@@ -9,11 +10,13 @@ const REQUIRED_FIELDS_BY_TYPE = {
     spouse: ["visaNumber", "issueDate", "expiryDate", "visaCopy", "sponsor"],
 };
 
-const buildMissingFields = (body, visaType) => {
+const buildMissingFields = (body, visaType, existingDocument) => {
     const required = REQUIRED_FIELDS_BY_TYPE[visaType] || [];
     return required.filter((field) => {
         if (field === "visaCopy") {
-            return !body.visaCopy;
+            // Check if visaCopy is provided OR if existing document exists in DB
+            const hasVisaCopy = body.visaCopy && body.visaCopy.trim() !== '';
+            return !hasVisaCopy && !existingDocument;
         }
         const value = body[field];
         return value === undefined || value === null || value === "";
@@ -43,46 +46,83 @@ export const updateVisaDetails = async (req, res) => {
         return res.status(400).json({ message: "Invalid visa type provided." });
     }
 
-    const missingFields = buildMissingFields(
-        { visaNumber, issueDate, expiryDate, sponsor, visaCopy },
-        visaType
-    );
-    if (missingFields.length > 0) {
-        return res.status(400).json({
-            message: "Missing required visa fields.",
-            missingFields,
-        });
-    }
-
-    const parsedIssueDate = normalizeDate(issueDate);
-    const parsedExpiryDate = normalizeDate(expiryDate);
-    if (!parsedIssueDate || !parsedExpiryDate) {
-        return res.status(400).json({
-            message: "Invalid issue or expiry date provided.",
-        });
-    }
-
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId first to check for existing documents
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found." });
         }
-
         const employeeId = employee.employeeId;
 
+        // Check if existing document exists in database (check for both url and data for backward compatibility)
+        const existingVisa = await EmployeeVisa.findOne({ employeeId });
+        const existingDocument = existingVisa?.[visaType]?.document?.url || existingVisa?.[visaType]?.document?.data;
+
+        const missingFields = buildMissingFields(
+            { visaNumber, issueDate, expiryDate, sponsor, visaCopy },
+            visaType,
+            existingDocument
+        );
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                message: "Missing required visa fields.",
+                missingFields,
+            });
+        }
+
+        const parsedIssueDate = normalizeDate(issueDate);
+        const parsedExpiryDate = normalizeDate(expiryDate);
+        if (!parsedIssueDate || !parsedExpiryDate) {
+            return res.status(400).json({
+                message: "Invalid issue or expiry date provided.",
+            });
+        }
+
+        // Handle document upload to Cloudinary if new document provided
+        let documentData = undefined;
+        if (visaCopy && visaCopy.trim() !== '') {
+            // Check if it's already a Cloudinary URL or base64
+            if (visaCopy.startsWith('http://') || visaCopy.startsWith('https://')) {
+                // Already a Cloudinary URL
+                documentData = {
+                    url: visaCopy,
+                    name: visaCopyName || "",
+                    mimeType: visaCopyMime || "",
+                };
+            } else {
+                // Upload base64 to Cloudinary
+                const base64Data = visaCopy.startsWith('data:') ? visaCopy : `data:${visaCopyMime || 'application/pdf'};base64,${visaCopy}`;
+                const uploadResult = await uploadDocumentToCloudinary(
+                    base64Data,
+                    `employee-documents/${employeeId}/visa/${visaType}`,
+                    visaCopyName || `${visaType}-visa.pdf`,
+                    'raw'
+                );
+                
+                // Delete old document from Cloudinary if exists
+                if (existingVisa?.[visaType]?.document?.publicId) {
+                    await deleteDocumentFromCloudinary(existingVisa[visaType].document.publicId, 'raw');
+                }
+
+                documentData = {
+                    url: uploadResult.url,
+                    publicId: uploadResult.publicId,
+                    name: visaCopyName || "",
+                    mimeType: visaCopyMime || "",
+                };
+            }
+        } else {
+            // Preserve existing document if no new one provided
+            documentData = existingVisa?.[visaType]?.document || undefined;
+        }
+
+        // Build visa payload - preserve existing document if no new one provided
         const visaPayload = {
             number: visaNumber,
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
             sponsor: sponsor || "",
-            document: visaCopy
-                ? {
-                      data: visaCopy,
-                      name: visaCopyName || "",
-                      mimeType: visaCopyMime || "",
-                  }
-                : undefined,
+            document: documentData,
             lastUpdated: new Date(),
         };
 

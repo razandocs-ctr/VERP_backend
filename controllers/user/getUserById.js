@@ -49,7 +49,8 @@ export const getUserById = async (req, res) => {
             designation: designation,
             permissions: permissions,
             // For system admin, show "System Users" instead of employeeId
-            employeeId: isSystemAdmin ? 'System Users' : (user.employeeId || null)
+            employeeId: isSystemAdmin ? 'System Users' : (user.employeeId || null),
+            isSystemAdmin: isSystemAdmin
         };
 
         return res.status(200).json({

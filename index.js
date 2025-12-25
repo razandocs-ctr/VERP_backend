@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db.js"; // <-- Import DB connection
 import loginRoute from "./routes/loginRoutes.js"; // <-- Add routes
@@ -11,11 +12,36 @@ dotenv.config();
 connectDB(); // <-- Call DB connection
 
 const app = express();
+
+// Enable compression for all responses (reduces payload size by ~70-90%)
+app.use(compression({
+    level: 6, // Compression level (1-9, 6 is a good balance)
+    threshold: 1024, // Only compress responses > 1KB
+    filter: (req, res) => {
+        // Don't compress if client doesn't support it
+        if (req.headers['x-no-compression']) {
+            return false;
+        }
+        // Use compression for JSON responses
+        return compression.filter(req, res);
+    }
+}));
+
 app.use(cors({
     origin: '*',
 }));
-app.use(express.json({ limit: "15mb" }));
-app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// Request timeout middleware - catch hanging requests
+app.use((req, res, next) => {
+    req.setTimeout(60000, () => {
+        if (!res.headersSent) {
+            res.status(504).json({ message: 'Request timeout' });
+        }
+    });
+    next();
+});
 
 // Test API Endpoint
 app.get("/", (req, res) => {

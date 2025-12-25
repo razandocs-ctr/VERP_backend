@@ -20,7 +20,8 @@ const employeeBankSchema = new mongoose.Schema(
         swiftCode: { type: String },
         bankOtherDetails: { type: String },
         bankAttachment: {
-            data: { type: String },
+            url: { type: String }, // Cloudinary URL (preferred)
+            data: { type: String }, // Base64 data (legacy, for backward compatibility)
             name: { type: String },
             mimeType: { type: String },
         },

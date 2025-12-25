@@ -1,12 +1,15 @@
-import { getCompleteEmployee, saveEmployeeData } from "../../services/employeeService.js";
+import { getCompleteEmployee, saveEmployeeData, resolveEmployeeId } from "../../services/employeeService.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
+import EmployeeSalary from "../../models/EmployeeSalary.js";
+import { uploadDocumentToCloudinary } from "../../utils/cloudinaryUpload.js";
+import { hasPermission, isUserAdministrator } from "../../services/permissionService.js";
 
 export const updateBasicDetails = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Get employeeId from the employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from the employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
@@ -72,12 +75,210 @@ export const updateBasicDetails = async (req, res) => {
             }
         });
 
-        // 3. If nothing to update
+        // 3. Handle documents - if URL is provided, use it; if data is base64, upload to Cloudinary
+        // (Frontend now uploads to Cloudinary first, but we keep this as fallback for backward compatibility)
+        
+        // Handle bankAttachment - check for URL first, then data
+        if (updatePayload.bankAttachment) {
+            const bankAttachment = updatePayload.bankAttachment;
+            // If URL is provided (from frontend Cloudinary upload), use it directly
+            if (bankAttachment.url) {
+                // Already a Cloudinary URL, use as-is
+                updatePayload.bankAttachment = {
+                    url: bankAttachment.url,
+                    name: bankAttachment.name,
+                    mimeType: bankAttachment.mimeType
+                };
+            } else if (bankAttachment.data && !bankAttachment.data.startsWith('http')) {
+                // Base64 data - upload to Cloudinary (fallback for legacy)
+                try {
+                    const cloudinaryResult = await uploadDocumentToCloudinary(
+                        bankAttachment.data,
+                        `employee-documents/${employeeId}/bank`,
+                        bankAttachment.name || 'bank-attachment',
+                        'raw'
+                    );
+                    updatePayload.bankAttachment = {
+                        url: cloudinaryResult.url,
+                        name: bankAttachment.name,
+                        mimeType: bankAttachment.mimeType
+                    };
+                } catch (error) {
+                    console.error('Error uploading bank attachment to Cloudinary:', error);
+                    // Continue with base64 if Cloudinary upload fails
+                }
+            }
+        }
+
+        // Handle offerLetter - check for URL first, then data
+        if (updatePayload.offerLetter) {
+            const offerLetter = updatePayload.offerLetter;
+            // If URL is provided (from frontend Cloudinary upload), use it directly
+            if (offerLetter.url) {
+                updatePayload.offerLetter = {
+                    url: offerLetter.url,
+                    name: offerLetter.name,
+                    mimeType: offerLetter.mimeType
+                };
+            } else if (offerLetter.data && !offerLetter.data.startsWith('http')) {
+                // Base64 data - upload to Cloudinary (fallback for legacy)
+                try {
+                    const cloudinaryResult = await uploadDocumentToCloudinary(
+                        offerLetter.data,
+                        `employee-documents/${employeeId}/salary`,
+                        offerLetter.name || 'offer-letter',
+                        'raw'
+                    );
+                    updatePayload.offerLetter = {
+                        url: cloudinaryResult.url,
+                        name: offerLetter.name,
+                        mimeType: offerLetter.mimeType
+                    };
+                } catch (error) {
+                    console.error('Error uploading offer letter to Cloudinary:', error);
+                    // Continue with base64 if Cloudinary upload fails
+                }
+            }
+        }
+
+        // Handle salaryHistory offer letters
+        if (updatePayload.salaryHistory && Array.isArray(updatePayload.salaryHistory)) {
+            for (let entry of updatePayload.salaryHistory) {
+                if (entry.offerLetter) {
+                    // If URL is provided, use it directly
+                    if (entry.offerLetter.url) {
+                        entry.offerLetter = {
+                            url: entry.offerLetter.url,
+                            name: entry.offerLetter.name,
+                            mimeType: entry.offerLetter.mimeType
+                        };
+                    } else if (entry.offerLetter.data && !entry.offerLetter.data.startsWith('http')) {
+                        // Base64 data - upload to Cloudinary (fallback)
+                        try {
+                            const cloudinaryResult = await uploadDocumentToCloudinary(
+                                entry.offerLetter.data,
+                                `employee-documents/${employeeId}/salary-history`,
+                                entry.offerLetter.name || 'offer-letter',
+                                'raw'
+                            );
+                            entry.offerLetter = {
+                                url: cloudinaryResult.url,
+                                name: entry.offerLetter.name,
+                                mimeType: entry.offerLetter.mimeType
+                            };
+                        } catch (error) {
+                            console.error('Error uploading salary history offer letter to Cloudinary:', error);
+                            // Continue with base64 if Cloudinary upload fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle documents array - process each document
+        if (updatePayload.documents && Array.isArray(updatePayload.documents)) {
+            for (let doc of updatePayload.documents) {
+                if (doc.document) {
+                    // If URL is provided (from frontend Cloudinary upload), use it directly
+                    if (doc.document.url) {
+                        doc.document = {
+                            url: doc.document.url,
+                            name: doc.document.name,
+                            mimeType: doc.document.mimeType
+                        };
+                    } else if (doc.document.data && !doc.document.data.startsWith('http')) {
+                        // Base64 data - upload to Cloudinary (fallback for legacy)
+                        try {
+                            const cloudinaryResult = await uploadDocumentToCloudinary(
+                                doc.document.data,
+                                `employee-documents/${employeeId}/documents`,
+                                doc.document.name || 'document',
+                                'raw'
+                            );
+                            doc.document = {
+                                url: cloudinaryResult.url,
+                                name: doc.document.name,
+                                mimeType: doc.document.mimeType
+                            };
+                        } catch (error) {
+                            console.error('Error uploading document to Cloudinary:', error);
+                            // Continue with base64 if Cloudinary upload fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle trainingDetails certificates - process each training certificate
+        if (updatePayload.trainingDetails && Array.isArray(updatePayload.trainingDetails)) {
+            for (let training of updatePayload.trainingDetails) {
+                if (training.certificate) {
+                    // If URL is provided (from frontend Cloudinary upload), use it directly
+                    if (training.certificate.url) {
+                        training.certificate = {
+                            url: training.certificate.url,
+                            name: training.certificate.name,
+                            mimeType: training.certificate.mimeType
+                        };
+                    } else if (training.certificate.data && !training.certificate.data.startsWith('http')) {
+                        // Base64 data - upload to Cloudinary (fallback for legacy)
+                        try {
+                            const cloudinaryResult = await uploadDocumentToCloudinary(
+                                training.certificate.data,
+                                `employee-documents/${employeeId}/training`,
+                                training.certificate.name || 'certificate',
+                                'raw'
+                            );
+                            training.certificate = {
+                                url: cloudinaryResult.url,
+                                name: training.certificate.name,
+                                mimeType: training.certificate.mimeType
+                            };
+                        } catch (error) {
+                            console.error('Error uploading training certificate to Cloudinary:', error);
+                            // Continue with base64 if Cloudinary upload fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Check permission for salary history deletion
+        // If salaryHistory is being updated, check if it's a deletion (array length decreased)
+        if (updatePayload.salaryHistory !== undefined && Array.isArray(updatePayload.salaryHistory)) {
+            // Get user ID from request (set by authMiddleware)
+            const userId = req.user?.id;
+            
+            if (userId) {
+                // Get current salary history from EmployeeSalary model
+                const employeeSalary = await EmployeeSalary.findOne({ employeeId });
+                const currentSalaryHistory = employeeSalary?.salaryHistory || [];
+                const newSalaryHistory = updatePayload.salaryHistory;
+                
+                // If new array is shorter, it means deletion occurred
+                if (newSalaryHistory.length < currentSalaryHistory.length) {
+                    // Check if user is admin
+                    const isAdminUser = await isUserAdministrator(userId);
+                    
+                    // If not admin, check delete permission for salary
+                    if (!isAdminUser) {
+                        const hasDeletePermission = await hasPermission(userId, 'hrm_employees_view_salary', 'delete');
+                        if (!hasDeletePermission) {
+                            return res.status(403).json({ 
+                                message: "Access denied. You don't have delete permission for salary details." 
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. If nothing to update
         if (Object.keys(updatePayload).length === 0) {
             return res.status(400).json({ message: "Nothing to update" });
         }
 
-        // 4. Update using service (which handles routing to correct collections)
+        // 6. Update using service (which handles routing to correct collections)
         const updated = await saveEmployeeData(employeeId, updatePayload);
 
         if (!updated) {
@@ -87,7 +288,7 @@ export const updateBasicDetails = async (req, res) => {
         // Remove password from response
         delete updated.password;
 
-        // 5. Return success
+        // 7. Return success
         return res.status(200).json({
             message: "Basic details updated",
             employee: updated

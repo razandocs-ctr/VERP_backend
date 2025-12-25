@@ -27,8 +27,10 @@ import { addTraining } from "../controllers/employee/addTraining.js";
 import { updateTraining } from "../controllers/employee/updateTraining.js";
 import { deleteTraining } from "../controllers/employee/deleteTraining.js";
 import { uploadProfilePicture } from "../controllers/employee/uploadProfilePicture.js";
+import { uploadDocument } from "../controllers/employee/uploadDocument.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { checkPermission } from "../middleware/permissionMiddleware.js";
+import { getEmployeeDocument } from "../controllers/employee/getEmployeeDocument.js";
 
 const router = express.Router();
 
@@ -69,6 +71,9 @@ router.patch("/driving-license/:id", checkPermission('hrm_employees_view_passpor
 // Upload profile picture - requires edit permission
 router.post("/upload-profile-picture/:id", checkPermission('hrm_employees_view_basic', 'edit'), uploadProfilePicture);
 
+// Upload document to Cloudinary - requires edit permission
+router.post("/upload-document/:id", checkPermission('hrm_employees_view', 'edit'), uploadDocument);
+
 // All :id specific routes must come before the generic :id route
 // Emergency contacts - requires edit permission
 router.post("/:id/emergency-contact", checkPermission('hrm_employees_view_emergency', 'create'), addEmergencyContact);
@@ -95,6 +100,9 @@ router.post("/:id/send-approval-email", checkPermission('hrm_employees', 'edit')
 
 // Approve profile - requires edit permission
 router.post("/:id/approve-profile", checkPermission('hrm_employees', 'edit'), approveProfile);
+
+// Get specific document - requires view permission
+router.get("/:id/document", checkPermission('hrm_employees_view', 'view'), getEmployeeDocument);
 
 // Generic :id routes must come last
 // Get employee by ID - requires view permission

@@ -1,13 +1,13 @@
 import cloudinary from '../../config/cloudinary.js';
 import EmployeeBasic from '../../models/EmployeeBasic.js';
-import { getCompleteEmployee } from '../../services/employeeService.js';
+import { getCompleteEmployee, resolveEmployeeId } from '../../services/employeeService.js';
 
 export const uploadProfilePicture = async (req, res) => {
     try {
         console.log('Upload profile picture endpoint hit');
         console.log('Request params:', req.params);
         console.log('Request body keys:', Object.keys(req.body || {}));
-        
+
         const { id } = req.params;
         const { image } = req.body; // Base64 image string
 
@@ -20,8 +20,8 @@ export const uploadProfilePicture = async (req, res) => {
             return res.status(400).json({ message: 'Invalid image format' });
         }
 
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: 'Employee not found' });
         }

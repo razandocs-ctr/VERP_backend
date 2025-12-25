@@ -1,5 +1,5 @@
 import EmployeeTraining from "../../models/EmployeeTraining.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
 
 export const updateTraining = async (req, res) => {
     const { id, trainingId } = req.params;
@@ -7,8 +7,8 @@ export const updateTraining = async (req, res) => {
 
     // Validate required fields
     if (!trainingName || !trainingFrom || !trainingDate) {
-        return res.status(400).json({ 
-            message: "Training Name, Training From, and Training Date are required" 
+        return res.status(400).json({
+            message: "Training Name, Training From, and Training Date are required"
         });
     }
 
@@ -19,8 +19,8 @@ export const updateTraining = async (req, res) => {
     }
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }

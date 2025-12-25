@@ -1,5 +1,5 @@
 import EmployeeEducation from "../../models/EmployeeEducation.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
 
 export const addEducation = async (req, res) => {
     const { id } = req.params;
@@ -7,14 +7,14 @@ export const addEducation = async (req, res) => {
 
     // Validate required fields
     if (!universityOrBoard || !collegeOrInstitute || !course || !fieldOfStudy || !completedYear) {
-        return res.status(400).json({ 
-            message: "University/Board, College/Institute, Course, Field of Study, and Completed Year are required" 
+        return res.status(400).json({
+            message: "University/Board, College/Institute, Course, Field of Study, and Completed Year are required"
         });
     }
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }

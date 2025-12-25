@@ -2,6 +2,12 @@ import User from "../../models/User.js";
 import Group from "../../models/Group.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
 import bcrypt from "bcryptjs";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Update user
 export const updateUser = async (req, res) => {
@@ -28,26 +34,83 @@ export const updateUser = async (req, res) => {
         const adminUsername = process.env.ADMIN_USERNAME || 'admin';
         const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
 
-        // For system admin, only allow password updates
+        // For system admin, password is stored ONLY in .env file, not in MongoDB
         if (isSystemAdmin) {
-            if (password === undefined) {
+            // Only allow password updates for admin user
+            if (password === undefined || password === null || password === '') {
                 return res.status(400).json({ 
-                    message: "Only password can be updated for system admin user" 
+                    message: "Password is required to update admin password." 
                 });
             }
-            // Only update password for admin user
-            const isSamePassword = await bcrypt.compare(password, user.password);
-            if (isSamePassword) {
+            
+            // Validate password requirements
+            if (password.length < 8) {
+                return res.status(400).json({
+                    message: "Password must be at least 8 characters"
+                });
+            }
+            if (!/[A-Z]/.test(password)) {
+                return res.status(400).json({
+                    message: "Password must contain at least one uppercase letter"
+                });
+            }
+            if (!/[a-z]/.test(password)) {
+                return res.status(400).json({
+                    message: "Password must contain at least one lowercase letter"
+                });
+            }
+            if (!/[0-9]/.test(password)) {
+                return res.status(400).json({
+                    message: "Password must contain at least one number"
+                });
+            }
+            
+            // Check if new password is different from current .env password
+            const currentAdminPassword = process.env.ADMIN_PASSWORD || 'IT20!!@Erp';
+            if (password === currentAdminPassword) {
                 return res.status(400).json({
                     message: "New password must be different from the current password"
                 });
             }
-            user.password = await bcrypt.hash(password, 10);
-            await user.save();
-            return res.status(200).json({
-                message: "Password updated successfully",
-                user: await User.findById(id).select('-password').populate('group', 'name')
-            });
+            
+            // Update .env file with new password
+            try {
+                // Find .env file path
+                const envPath = path.join(__dirname, '..', '..', '.env');
+                
+                // Read .env file if it exists
+                let envContent = '';
+                if (fs.existsSync(envPath)) {
+                    envContent = fs.readFileSync(envPath, 'utf8');
+                }
+                
+                // Update or add ADMIN_PASSWORD
+                const adminPasswordRegex = /^ADMIN_PASSWORD=.*$/m;
+                if (adminPasswordRegex.test(envContent)) {
+                    envContent = envContent.replace(adminPasswordRegex, `ADMIN_PASSWORD=${password}`);
+                } else {
+                    envContent += (envContent ? '\n' : '') + `ADMIN_PASSWORD=${password}\n`;
+                }
+                
+                // Write updated content to .env file
+                fs.writeFileSync(envPath, envContent, 'utf8');
+                
+                // Update process.env for current session
+                process.env.ADMIN_PASSWORD = password;
+                
+                console.log('Admin password updated in .env file:', user.username);
+                
+                return res.status(200).json({
+                    message: 'Admin password updated in .env file. Please restart the server for changes to take full effect.',
+                    user: await User.findById(id).select('-password').populate('group', 'name'),
+                    requiresRestart: true
+                });
+            } catch (error) {
+                console.error('Error updating .env file:', error);
+                return res.status(500).json({
+                    message: `Failed to update .env file: ${error.message}`
+                });
+            }
         }
 
         // Build update object

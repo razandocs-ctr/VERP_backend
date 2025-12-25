@@ -1,12 +1,15 @@
 import EmployeeDrivingLicense from "../../models/EmployeeDrivingLicense.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "document"];
 
-const buildMissingFields = (body) => {
+const buildMissingFields = (body, existingDocument) => {
     return REQUIRED_FIELDS.filter((field) => {
         if (field === "document") {
-            return !body.document;
+            // Check if document is provided OR if existing document exists in DB
+            const hasDocument = body.document && body.document.trim() !== '';
+            return !hasDocument && !existingDocument;
         }
         const value = body[field];
         return value === undefined || value === null || value === "";
@@ -30,42 +33,79 @@ export const updateDrivingLicenseDetails = async (req, res) => {
         documentMime,
     } = req.body || {};
 
-    const missingFields = buildMissingFields({ number, issueDate, expiryDate, document });
-    if (missingFields.length > 0) {
-        return res.status(400).json({
-            message: "Missing required Driving License fields.",
-            missingFields,
-        });
-    }
-
-    const parsedIssueDate = normalizeDate(issueDate);
-    const parsedExpiryDate = normalizeDate(expiryDate);
-    if (!parsedIssueDate || !parsedExpiryDate) {
-        return res.status(400).json({
-            message: "Invalid issue or expiry date provided.",
-        });
-    }
-
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId first to check for existing documents
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found." });
         }
 
         const employeeId = employee.employeeId;
 
+        // Check if existing document exists in database (check for both url and data for backward compatibility)
+        const existingDrivingLicense = await EmployeeDrivingLicense.findOne({ employeeId });
+        const existingDocument = existingDrivingLicense?.drivingLicenceDetails?.document?.url || existingDrivingLicense?.drivingLicenceDetails?.document?.data;
+
+        const missingFields = buildMissingFields({ number, issueDate, expiryDate, document }, existingDocument);
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                message: "Missing required Driving License fields.",
+                missingFields,
+            });
+        }
+
+        const parsedIssueDate = normalizeDate(issueDate);
+        const parsedExpiryDate = normalizeDate(expiryDate);
+        if (!parsedIssueDate || !parsedExpiryDate) {
+            return res.status(400).json({
+                message: "Invalid issue or expiry date provided.",
+            });
+        }
+
+        // Handle document upload to Cloudinary if new document provided
+        let documentData = undefined;
+        if (document && document.trim() !== '') {
+            // Check if it's already a Cloudinary URL or base64
+            if (document.startsWith('http://') || document.startsWith('https://')) {
+                // Already a Cloudinary URL
+                documentData = {
+                    url: document,
+                    name: documentName || "",
+                    mimeType: documentMime || "",
+                };
+            } else {
+                // Upload base64 to Cloudinary
+                const base64Data = document.startsWith('data:') ? document : `data:${documentMime || 'application/pdf'};base64,${document}`;
+                const uploadResult = await uploadDocumentToCloudinary(
+                    base64Data,
+                    `employee-documents/${employeeId}/driving-license`,
+                    documentName || 'driving-license.pdf',
+                    'raw'
+                );
+                
+                // Delete old document from Cloudinary if exists
+                if (existingDrivingLicense?.drivingLicenceDetails?.document?.publicId) {
+                    await deleteDocumentFromCloudinary(existingDrivingLicense.drivingLicenceDetails.document.publicId, 'raw');
+                }
+
+                documentData = {
+                    url: uploadResult.url,
+                    publicId: uploadResult.publicId,
+                    name: documentName || "",
+                    mimeType: documentMime || "",
+                };
+            }
+        } else {
+            // Preserve existing document if no new one provided
+            documentData = existingDrivingLicense?.drivingLicenceDetails?.document || undefined;
+        }
+
+        // Build payload - preserve existing document if no new one provided
         const drivingLicensePayload = {
             number: number.trim(),
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
-            document: document
-                ? {
-                      data: document,
-                      name: documentName || "",
-                      mimeType: documentMime || "",
-                  }
-                : undefined,
+            document: documentData,
             lastUpdated: new Date(),
         };
 

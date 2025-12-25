@@ -32,8 +32,7 @@ export const login = async (req, res) => {
             });
 
             if (!user) {
-                // Create admin user if it doesn't exist
-                const hashedPassword = await bcrypt.hash(adminPassword, 10);
+                // Create admin user if it doesn't exist (NO PASSWORD IN DATABASE - password only in .env)
                 const passwordExpiryDate = new Date();
                 passwordExpiryDate.setDate(passwordExpiryDate.getDate() + 180);
 
@@ -41,7 +40,7 @@ export const login = async (req, res) => {
                     username: adminUsername.toLowerCase(),
                     name: 'Super User(System)',
                     email: 'verp@vitsllc.com',
-                    password: hashedPassword,
+                    password: null, // Admin password is NOT stored in MongoDB - only in .env
                     employeeId: null,
                     group: null,
                     groupName: null,
@@ -50,7 +49,7 @@ export const login = async (req, res) => {
                     passwordExpiryDate: passwordExpiryDate,
                 });
                 await user.save();
-                console.log('System admin user created');
+                console.log('System admin user created (password stored only in .env)');
             } else {
                 // Update admin user details if they exist but don't match
                 if (user.username !== adminUsername.toLowerCase()) {
@@ -65,10 +64,15 @@ export const login = async (req, res) => {
                 if (user.employeeId !== null) {
                     user.employeeId = null;
                 }
-                // Update password if it doesn't match
-                const passwordMatches = await bcrypt.compare(adminPassword, user.password);
-                if (!passwordMatches) {
-                    user.password = await bcrypt.hash(adminPassword, 10);
+                // Ensure admin user has no group (system admin doesn't belong to any group)
+                if (user.group !== null) {
+                    user.group = null;
+                    user.groupName = null;
+                }
+                // Remove password from database if it exists (admin password should only be in .env)
+                if (user.password !== null && user.password !== undefined) {
+                    user.password = null;
+                    console.log('Admin password removed from database (password stored only in .env)');
                 }
                 await user.save();
             }

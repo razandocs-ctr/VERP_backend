@@ -55,7 +55,8 @@ const employeeBasicSchema = new mongoose.Schema(
                 type: { type: String },
                 description: { type: String },
                 document: {
-                    data: { type: String },
+                    url: { type: String }, // Cloudinary URL (preferred)
+                    data: { type: String }, // Base64 data (legacy/fallback)
                     name: { type: String },
                     mimeType: { type: String }
                 }
@@ -71,7 +72,8 @@ const employeeBasicSchema = new mongoose.Schema(
                 trainingDate: { type: Date },
                 trainingCost: { type: Number },
                 certificate: {
-                    data: { type: String },
+                    url: { type: String }, // Cloudinary URL (preferred)
+                    data: { type: String }, // Base64 data (legacy/fallback)
                     name: { type: String },
                     mimeType: { type: String }
                 }
@@ -85,10 +87,12 @@ const employeeBasicSchema = new mongoose.Schema(
 // Note: employeeId and email already have indexes from unique: true
 employeeBasicSchema.index({ department: 1 });
 employeeBasicSchema.index({ status: 1 });
+employeeBasicSchema.index({ designation: 1 });
+employeeBasicSchema.index({ profileStatus: 1 });
+employeeBasicSchema.index({ createdAt: -1 }); // For sorting
+// Compound indexes for common query patterns
+employeeBasicSchema.index({ department: 1, status: 1 });
+employeeBasicSchema.index({ status: 1, profileStatus: 1 });
+employeeBasicSchema.index({ firstName: 1, lastName: 1 }); // For search queries
 
 export default mongoose.model("EmployeeBasic", employeeBasicSchema);
-
-
-
-
-

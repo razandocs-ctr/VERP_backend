@@ -26,12 +26,14 @@ const salaryHistorySchema = new mongoose.Schema(
         additionalAllowances: [additionalAllowanceSchema], // Store all additional allowances
         totalSalary: { type: Number, default: 0 },
         attachment: {
-            data: { type: String },
+            url: { type: String }, // Cloudinary URL (preferred)
+            data: { type: String }, // Base64 data (legacy, for backward compatibility)
             name: { type: String },
             mimeType: { type: String },
         },
         offerLetter: {
-            data: { type: String },
+            url: { type: String }, // Cloudinary URL (preferred)
+            data: { type: String }, // Base64 data (legacy, for backward compatibility)
             name: { type: String },
             mimeType: { type: String },
         },
@@ -59,7 +61,8 @@ const employeeSalarySchema = new mongoose.Schema(
         otherAllowancePercentage: { type: Number, default: 20 },
         additionalAllowances: [additionalAllowanceSchema],
         offerLetter: {
-            data: { type: String },
+            url: { type: String }, // Cloudinary URL (preferred)
+            data: { type: String }, // Base64 data (legacy, for backward compatibility)
             name: { type: String },
             mimeType: { type: String },
         },

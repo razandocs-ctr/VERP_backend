@@ -11,6 +11,16 @@ export const deleteUser = async (req, res) => {
             return res.status(404).json({ message: "User not found" });
         }
 
+        // Prevent deletion of system admin user
+        const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+        const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
+
+        if (isSystemAdmin) {
+            return res.status(403).json({
+                message: "Cannot delete system admin user. This user is protected and cannot be deleted."
+            });
+        }
+
         // If user is in a group, remove them from the group's users array
         if (user.group) {
             await Group.findByIdAndUpdate(

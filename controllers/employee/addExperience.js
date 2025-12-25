@@ -1,5 +1,5 @@
 import EmployeeExperience from "../../models/EmployeeExperience.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
 
 export const addExperience = async (req, res) => {
     const { id } = req.params;
@@ -7,21 +7,21 @@ export const addExperience = async (req, res) => {
 
     // Validate required fields
     if (!company || !designation || !startDate) {
-        return res.status(400).json({ 
-            message: "Company, Designation, and Start Date are required" 
+        return res.status(400).json({
+            message: "Company, Designation, and Start Date are required"
         });
     }
 
     // Validate that end date is after start date if both are provided
     if (endDate && new Date(endDate) < new Date(startDate)) {
-        return res.status(400).json({ 
-            message: "End Date must be after Start Date" 
+        return res.status(400).json({
+            message: "End Date must be after Start Date"
         });
     }
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }

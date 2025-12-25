@@ -1,5 +1,6 @@
 import EmployeePassport from "../../models/EmployeePassport.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate"];
 
@@ -46,13 +47,55 @@ export const updatePassportDetails = async (req, res) => {
     }
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found." });
         }
 
         const employeeId = employee.employeeId;
+
+        // Handle document upload to Cloudinary if new document provided
+        let documentData = undefined;
+        if (passportCopy) {
+            // Check if it's already a Cloudinary URL or base64
+            if (passportCopy.startsWith('http://') || passportCopy.startsWith('https://')) {
+                // Already a Cloudinary URL
+                documentData = {
+                    url: passportCopy,
+                    name: passportCopyName || "",
+                    mimeType: passportCopyMime || "",
+                };
+            } else {
+                // Upload base64 to Cloudinary
+                const base64Data = passportCopy.startsWith('data:') ? passportCopy : `data:${passportCopyMime || 'application/pdf'};base64,${passportCopy}`;
+                const uploadResult = await uploadDocumentToCloudinary(
+                    base64Data,
+                    `employee-documents/${employeeId}/passport`,
+                    passportCopyName || 'passport.pdf',
+                    'raw'
+                );
+                
+                // Delete old document from Cloudinary if exists
+                const existingPassport = await EmployeePassport.findOne({ employeeId });
+                if (existingPassport?.document?.publicId) {
+                    await deleteDocumentFromCloudinary(existingPassport.document.publicId, 'raw');
+                }
+
+                documentData = {
+                    url: uploadResult.url,
+                    publicId: uploadResult.publicId,
+                    name: passportCopyName || "",
+                    mimeType: passportCopyMime || "",
+                };
+            }
+        } else {
+            // Preserve existing document if no new one provided
+            const existingPassport = await EmployeePassport.findOne({ employeeId });
+            if (existingPassport?.document) {
+                documentData = existingPassport.document;
+            }
+        }
 
         // Build passport payload
         const passportPayload = {
@@ -61,13 +104,7 @@ export const updatePassportDetails = async (req, res) => {
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
             placeOfIssue: placeOfIssue?.trim() || "",
-            document: passportCopy
-                ? {
-                    data: passportCopy,
-                    name: passportCopyName || "",
-                    mimeType: passportCopyMime || "",
-                }
-                : undefined,
+            document: documentData,
             lastUpdated: new Date(),
             passportExp: parsedExpiryDate, // Update expiry date for quick reference
         };

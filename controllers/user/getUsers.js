@@ -30,9 +30,8 @@ export const getUsers = async (req, res) => {
             ];
         }
 
-        // Exclude system admin user from list
+        // Include system admin user in list (don't exclude it)
         const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-        filters.username = { $ne: adminUsername.toLowerCase() };
 
         // Get users with populated group
         const [users, total] = await Promise.all([
@@ -64,6 +63,9 @@ export const getUsers = async (req, res) => {
         const formattedUsers = await Promise.all(users.map(async (user, index) => {
             const designation = user.employeeId ? designationMap[user.employeeId] : null;
             const isAdministrator = designation && designation.toLowerCase() === 'administrator';
+            
+            // Check if this is the system admin user
+            const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
 
             return {
                 id: user._id,
@@ -71,14 +73,15 @@ export const getUsers = async (req, res) => {
                 username: user.username,
                 name: user.name,
                 email: user.email,
-                employeeId: user.employeeId || '---',
-                group: isAdministrator ? 'Administrator' : (user.group?.name || user.groupName || '-Not Assigned-'),
-                groupId: isAdministrator ? 'administrator' : (user.group?._id || user.group || null),
+                employeeId: isSystemAdmin ? 'System Users' : (user.employeeId || '---'),
+                group: isSystemAdmin ? 'NO group Member Full Access permission' : (isAdministrator ? 'Administrator' : (user.group?.name || user.groupName || '-Not Assigned-')),
+                groupId: isSystemAdmin ? null : (isAdministrator ? 'administrator' : (user.group?._id || user.group || null)),
                 status: user.status || 'Active',
                 enablePortalAccess: user.enablePortalAccess,
                 lastLogin: user.lastLogin,
                 createdAt: user.createdAt,
                 isAdministrator: isAdministrator,
+                isSystemAdmin: isSystemAdmin,
                 designation: designation || null
             };
         }));

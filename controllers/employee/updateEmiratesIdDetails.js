@@ -1,12 +1,15 @@
 import EmployeeEmiratesId from "../../models/EmployeeEmiratesId.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "upload"];
 
-const buildMissingFields = (body) => {
+const buildMissingFields = (body, existingDocument) => {
     return REQUIRED_FIELDS.filter((field) => {
         if (field === "upload") {
-            return !body.upload;
+            // Check if upload is provided OR if existing document exists in DB
+            const hasUpload = body.upload && body.upload.trim() !== '';
+            return !hasUpload && !existingDocument;
         }
         const value = body[field];
         return value === undefined || value === null || value === "";
@@ -30,42 +33,79 @@ export const updateEmiratesIdDetails = async (req, res) => {
         uploadMime,
     } = req.body || {};
 
-    const missingFields = buildMissingFields({ number, issueDate, expiryDate, upload });
-    if (missingFields.length > 0) {
-        return res.status(400).json({
-            message: "Missing required Emirates ID fields.",
-            missingFields,
-        });
-    }
-
-    const parsedIssueDate = normalizeDate(issueDate);
-    const parsedExpiryDate = normalizeDate(expiryDate);
-    if (!parsedIssueDate || !parsedExpiryDate) {
-        return res.status(400).json({
-            message: "Invalid issue or expiry date provided.",
-        });
-    }
-
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId first to check for existing documents
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found." });
         }
 
         const employeeId = employee.employeeId;
 
+        // Check if existing document exists in database (check for both url and data for backward compatibility)
+        const existingEmiratesId = await EmployeeEmiratesId.findOne({ employeeId });
+        const existingDocument = existingEmiratesId?.emiratesId?.document?.url || existingEmiratesId?.emiratesId?.document?.data;
+
+        const missingFields = buildMissingFields({ number, issueDate, expiryDate, upload }, existingDocument);
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                message: "Missing required Emirates ID fields.",
+                missingFields,
+            });
+        }
+
+        const parsedIssueDate = normalizeDate(issueDate);
+        const parsedExpiryDate = normalizeDate(expiryDate);
+        if (!parsedIssueDate || !parsedExpiryDate) {
+            return res.status(400).json({
+                message: "Invalid issue or expiry date provided.",
+            });
+        }
+
+        // Handle document upload to Cloudinary if new document provided
+        let documentData = undefined;
+        if (upload && upload.trim() !== '') {
+            // Check if it's already a Cloudinary URL or base64
+            if (upload.startsWith('http://') || upload.startsWith('https://')) {
+                // Already a Cloudinary URL
+                documentData = {
+                    url: upload,
+                    name: uploadName || "",
+                    mimeType: uploadMime || "",
+                };
+            } else {
+                // Upload base64 to Cloudinary
+                const base64Data = upload.startsWith('data:') ? upload : `data:${uploadMime || 'application/pdf'};base64,${upload}`;
+                const uploadResult = await uploadDocumentToCloudinary(
+                    base64Data,
+                    `employee-documents/${employeeId}/emirates-id`,
+                    uploadName || 'emirates-id.pdf',
+                    'raw'
+                );
+                
+                // Delete old document from Cloudinary if exists
+                if (existingEmiratesId?.emiratesId?.document?.publicId) {
+                    await deleteDocumentFromCloudinary(existingEmiratesId.emiratesId.document.publicId, 'raw');
+                }
+
+                documentData = {
+                    url: uploadResult.url,
+                    publicId: uploadResult.publicId,
+                    name: uploadName || "",
+                    mimeType: uploadMime || "",
+                };
+            }
+        } else {
+            // Preserve existing document if no new one provided
+            documentData = existingEmiratesId?.emiratesId?.document || undefined;
+        }
+
+        // Build payload - preserve existing document if no new one provided
         const emiratesIdPayload = {
             number: number.trim(),
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
-            document: upload
-                ? {
-                    data: upload,
-                    name: uploadName || "",
-                    mimeType: uploadMime || "",
-                }
-                : undefined,
+            document: documentData,
             lastUpdated: new Date(),
         };
 

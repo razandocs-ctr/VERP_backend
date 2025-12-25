@@ -22,18 +22,24 @@ import EmployeeTraining from "../models/EmployeeTraining.js";
  */
 export const getCompleteEmployee = async (id) => {
     try {
+        // Query timeout options - prevent hanging queries
+        const queryOptions = { maxTimeMS: 10000 }; // 10 second timeout per query
+
         // Determine if id is ObjectId or employeeId
         let employeeBasic;
+
         if (mongoose.Types.ObjectId.isValid(id) && id.toString().length === 24) {
             // It's an ObjectId
-            employeeBasic = await EmployeeBasic.findById(id)
+            employeeBasic = await EmployeeBasic.findById(id, null, queryOptions)
+                .select('-documents.document.data -trainingDetails.certificate.data')
                 .populate('reportingAuthority', 'firstName lastName employeeId')
                 .populate('primaryReportee', 'firstName lastName employeeId')
                 .populate('secondaryReportee', 'firstName lastName employeeId')
                 .lean();
         } else {
             // It's an employeeId (string)
-            employeeBasic = await EmployeeBasic.findOne({ employeeId: id })
+            employeeBasic = await EmployeeBasic.findOne({ employeeId: id }, null, queryOptions)
+                .select('-documents.document.data -trainingDetails.certificate.data')
                 .populate('reportingAuthority', 'firstName lastName employeeId')
                 .populate('primaryReportee', 'firstName lastName employeeId')
                 .populate('secondaryReportee', 'firstName lastName employeeId')
@@ -46,42 +52,109 @@ export const getCompleteEmployee = async (id) => {
 
         const employeeId = employeeBasic.employeeId;
 
-        // Fetch all related data in parallel
+        // Fetch all related data in parallel with optimized field selection
+        // Exclude large base64 document fields from initial queries to improve performance
+        // Use Promise.allSettled to prevent one failure from breaking the entire request
         const [
-            contact,
-            personal,
-            passport,
-            visa,
-            emiratesId,
-            labourCard,
-            medicalInsurance,
-            drivingLicense,
-            salary,
-            bank,
-            education,
-            experience,
-            emergencyContact,
-            training
-        ] = await Promise.all([
-            EmployeeContact.findOne({ employeeId }).lean(),
-            EmployeePersonal.findOne({ employeeId }).lean(),
-            EmployeePassport.findOne({ employeeId }).lean(),
-            EmployeeVisa.findOne({ employeeId }).lean(),
-            EmployeeEmiratesId.findOne({ employeeId }).lean(),
-            EmployeeLabourCard.findOne({ employeeId }).lean(),
-            EmployeeMedicalInsurance.findOne({ employeeId }).lean(),
-            EmployeeDrivingLicense.findOne({ employeeId }).lean(),
-            EmployeeSalary.findOne({ employeeId }).lean(),
-            EmployeeBank.findOne({ employeeId }).lean(),
-            EmployeeEducation.findOne({ employeeId }).lean(),
-            EmployeeExperience.findOne({ employeeId }).lean(),
-            EmployeeEmergencyContact.findOne({ employeeId }).lean(),
-            EmployeeTraining.findOne({ employeeId }).lean(),
+            contactResult,
+            personalResult,
+            passportResult,
+            visaResult,
+            emiratesIdResult,
+            labourCardResult,
+            medicalInsuranceResult,
+            drivingLicenseResult,
+            salaryResult,
+            bankResult,
+            educationResult,
+            experienceResult,
+            emergencyContactResult,
+            trainingResult
+        ] = await Promise.allSettled([
+            EmployeeContact.findOne({ employeeId }, null, queryOptions).select('-__v').lean(),
+            EmployeePersonal.findOne({ employeeId }, null, queryOptions).select('-__v').lean(),
+            EmployeePassport.findOne({ employeeId }, null, queryOptions).select('-__v -document.data').lean(),
+            EmployeeVisa.findOne({ employeeId }, null, queryOptions).select('-__v -visit.document.data -employment.document.data -spouse.document.data').lean(),
+            EmployeeEmiratesId.findOne({ employeeId }, null, queryOptions).select('-__v -emiratesId.document.data').lean(),
+            EmployeeLabourCard.findOne({ employeeId }, null, queryOptions).select('-__v -labourCard.document.data').lean(),
+            EmployeeMedicalInsurance.findOne({ employeeId }, null, queryOptions).select('-__v -medicalInsurance.document.data').lean(),
+            EmployeeDrivingLicense.findOne({ employeeId }, null, queryOptions).select('-__v -drivingLicenceDetails.document.data').lean(),
+            EmployeeSalary.findOne({ employeeId }, null, queryOptions).select('-__v -offerLetter.data -salaryHistory.attachment.data -salaryHistory.offerLetter.data').lean(),
+            EmployeeBank.findOne({ employeeId }, null, queryOptions).select('-__v -bankAttachment.data').lean(),
+            EmployeeEducation.findOne({ employeeId }, null, queryOptions).select('-__v -educationDetails.certificate.data').lean(),
+            EmployeeExperience.findOne({ employeeId }, null, queryOptions).select('-__v -experienceDetails.certificate.data').lean(),
+            EmployeeEmergencyContact.findOne({ employeeId }, null, queryOptions).select('-__v').lean(),
+            EmployeeTraining.findOne({ employeeId }, null, queryOptions).select('-__v -trainingDetails.certificate.data').lean(),
         ]);
 
+        // Extract values from Promise.allSettled results, handle errors gracefully
+        const contact = contactResult.status === 'fulfilled' ? contactResult.value : null;
+        const personal = personalResult.status === 'fulfilled' ? personalResult.value : null;
+        const passport = passportResult.status === 'fulfilled' ? passportResult.value : null;
+        const visa = visaResult.status === 'fulfilled' ? visaResult.value : null;
+        const emiratesId = emiratesIdResult.status === 'fulfilled' ? emiratesIdResult.value : null;
+        const labourCard = labourCardResult.status === 'fulfilled' ? labourCardResult.value : null;
+        const medicalInsurance = medicalInsuranceResult.status === 'fulfilled' ? medicalInsuranceResult.value : null;
+        const drivingLicense = drivingLicenseResult.status === 'fulfilled' ? drivingLicenseResult.value : null;
+        const salary = salaryResult.status === 'fulfilled' ? salaryResult.value : null;
+        const bank = bankResult.status === 'fulfilled' ? bankResult.value : null;
+        const education = educationResult.status === 'fulfilled' ? educationResult.value : null;
+        const experience = experienceResult.status === 'fulfilled' ? experienceResult.value : null;
+        const emergencyContact = emergencyContactResult.status === 'fulfilled' ? emergencyContactResult.value : null;
+        const training = trainingResult.status === 'fulfilled' ? trainingResult.value : null;
+
+        // Log any failed queries (but don't fail the entire request)
+        const failedQueries = [
+            { name: 'contact', result: contactResult },
+            { name: 'personal', result: personalResult },
+            { name: 'passport', result: passportResult },
+            { name: 'visa', result: visaResult },
+            { name: 'emiratesId', result: emiratesIdResult },
+            { name: 'labourCard', result: labourCardResult },
+            { name: 'medicalInsurance', result: medicalInsuranceResult },
+            { name: 'drivingLicense', result: drivingLicenseResult },
+            { name: 'salary', result: salaryResult },
+            { name: 'bank', result: bankResult },
+            { name: 'education', result: educationResult },
+            { name: 'experience', result: experienceResult },
+            { name: 'emergencyContact', result: emergencyContactResult },
+            { name: 'training', result: trainingResult },
+        ].filter(item => item.result.status === 'rejected');
+
+        if (failedQueries.length > 0) {
+            console.warn(`[getCompleteEmployee] Some queries failed for employee ${employeeId}:`,
+                failedQueries.map(q => `${q.name}: ${q.result.reason?.message || 'Unknown error'}`)
+            );
+        }
+
         // Combine all data into a single object
+        // Exclude large base64 document fields from employeeBasic to reduce payload size (prevents connection reset)
+        const { documents: basicDocuments, trainingDetails: basicTrainingDetails, ...employeeBasicWithoutDocs } = employeeBasic;
         const completeEmployee = {
-            ...employeeBasic,
+            ...employeeBasicWithoutDocs,
+            // Include documents but exclude base64 data (metadata only) - reduces payload by ~90%
+            documents: basicDocuments ? basicDocuments.map(doc => ({
+                type: doc.type,
+                description: doc.description,
+                document: doc.document ? {
+                    name: doc.document.name,
+                    mimeType: doc.document.mimeType,
+                    // data field excluded - fetch separately via /Employee/:id/document/:docId if needed
+                } : undefined,
+            })) : [],
+            // Include training details but exclude certificate base64 data
+            trainingDetails: basicTrainingDetails ? basicTrainingDetails.map(training => ({
+                trainingName: training.trainingName,
+                trainingDetails: training.trainingDetails,
+                trainingFrom: training.trainingFrom,
+                trainingDate: training.trainingDate,
+                trainingCost: training.trainingCost,
+                certificate: training.certificate ? {
+                    name: training.certificate.name,
+                    mimeType: training.certificate.mimeType,
+                    // data field excluded - fetch separately if needed
+                } : undefined,
+            })) : [],
             // Contact information
             ...(contact && {
                 contactNumber: contact.contactNumber,
@@ -108,7 +181,7 @@ export const getCompleteEmployee = async (id) => {
                 nationality: personal.nationality,
                 fathersName: personal.fathersName,
             }),
-            // Passport details
+            // Passport details - exclude large document.data field to reduce payload size
             ...(passport && {
                 passportDetails: {
                     number: passport.number,
@@ -116,36 +189,117 @@ export const getCompleteEmployee = async (id) => {
                     issueDate: passport.issueDate,
                     expiryDate: passport.expiryDate,
                     placeOfIssue: passport.placeOfIssue,
-                    document: passport.document,
+                    // Include document.url for viewing, exclude document.data to reduce payload
+                    document: passport.document ? {
+                        name: passport.document.name,
+                        mimeType: passport.document.mimeType,
+                        url: passport.document.url, // Added url for document viewing
+                        // data field excluded - fetch separately if needed
+                    } : undefined,
                     lastUpdated: passport.lastUpdated,
                 },
                 passportExp: passport.passportExp,
                 eidExp: passport.eidExp,
                 medExp: passport.medExp,
             }),
-            // Visa details
+            // Visa details - exclude large document.data fields to reduce payload
             ...(visa && {
                 visaDetails: {
-                    visit: visa.visit,
-                    employment: visa.employment,
-                    spouse: visa.spouse,
+                    visit: visa.visit ? {
+                        number: visa.visit.number,
+                        issueDate: visa.visit.issueDate,
+                        expiryDate: visa.visit.expiryDate,
+                        sponsor: visa.visit.sponsor,
+                        // Include document.url for viewing, exclude document.data
+                        document: visa.visit.document ? {
+                            name: visa.visit.document.name,
+                            mimeType: visa.visit.document.mimeType,
+                            url: visa.visit.document.url, // Added url for document viewing
+                        } : undefined,
+                        lastUpdated: visa.visit.lastUpdated,
+                    } : undefined,
+                    employment: visa.employment ? {
+                        number: visa.employment.number,
+                        issueDate: visa.employment.issueDate,
+                        expiryDate: visa.employment.expiryDate,
+                        sponsor: visa.employment.sponsor,
+                        document: visa.employment.document ? {
+                            name: visa.employment.document.name,
+                            mimeType: visa.employment.document.mimeType,
+                            url: visa.employment.document.url, // Added url for document viewing
+                        } : undefined,
+                        lastUpdated: visa.employment.lastUpdated,
+                    } : undefined,
+                    spouse: visa.spouse ? {
+                        number: visa.spouse.number,
+                        issueDate: visa.spouse.issueDate,
+                        expiryDate: visa.spouse.expiryDate,
+                        sponsor: visa.spouse.sponsor,
+                        document: visa.spouse.document ? {
+                            name: visa.spouse.document.name,
+                            mimeType: visa.spouse.document.mimeType,
+                            url: visa.spouse.document.url, // Added url for document viewing
+                        } : undefined,
+                        lastUpdated: visa.spouse.lastUpdated,
+                    } : undefined,
                 },
             }),
-            // Emirates ID details
+            // Emirates ID details - exclude large document.data field
             ...(emiratesId && {
-                emiratesIdDetails: emiratesId.emiratesId,
+                emiratesIdDetails: emiratesId.emiratesId ? {
+                    number: emiratesId.emiratesId.number,
+                    issueDate: emiratesId.emiratesId.issueDate,
+                    expiryDate: emiratesId.emiratesId.expiryDate,
+                    document: emiratesId.emiratesId.document ? {
+                        name: emiratesId.emiratesId.document.name,
+                        mimeType: emiratesId.emiratesId.document.mimeType,
+                        url: emiratesId.emiratesId.document.url, // Added url for document viewing
+                    } : undefined,
+                    lastUpdated: emiratesId.emiratesId.lastUpdated,
+                } : undefined,
             }),
-            // Labour Card details
+            // Labour Card details - exclude large document.data field
             ...(labourCard && {
-                labourCardDetails: labourCard.labourCard,
+                labourCardDetails: labourCard.labourCard ? {
+                    number: labourCard.labourCard.number,
+                    issueDate: labourCard.labourCard.issueDate,
+                    expiryDate: labourCard.labourCard.expiryDate,
+                    document: labourCard.labourCard.document ? {
+                        name: labourCard.labourCard.document.name,
+                        mimeType: labourCard.labourCard.document.mimeType,
+                        url: labourCard.labourCard.document.url, // Added url for document viewing
+                    } : undefined,
+                    lastUpdated: labourCard.labourCard.lastUpdated,
+                } : undefined,
             }),
-            // Medical Insurance details
+            // Medical Insurance details - exclude large document.data field
             ...(medicalInsurance && {
-                medicalInsuranceDetails: medicalInsurance.medicalInsurance,
+                medicalInsuranceDetails: medicalInsurance.medicalInsurance ? {
+                    provider: medicalInsurance.medicalInsurance.provider,
+                    number: medicalInsurance.medicalInsurance.number,
+                    issueDate: medicalInsurance.medicalInsurance.issueDate,
+                    expiryDate: medicalInsurance.medicalInsurance.expiryDate,
+                    document: medicalInsurance.medicalInsurance.document ? {
+                        name: medicalInsurance.medicalInsurance.document.name,
+                        mimeType: medicalInsurance.medicalInsurance.document.mimeType,
+                        url: medicalInsurance.medicalInsurance.document.url, // Added url for document viewing
+                    } : undefined,
+                    lastUpdated: medicalInsurance.medicalInsurance.lastUpdated,
+                } : undefined,
             }),
-            // Driving License details
+            // Driving License details - exclude large document.data field
             ...(drivingLicense && {
-                drivingLicenceDetails: drivingLicense.drivingLicenceDetails,
+                drivingLicenceDetails: drivingLicense.drivingLicenceDetails ? {
+                    number: drivingLicense.drivingLicenceDetails.number,
+                    issueDate: drivingLicense.drivingLicenceDetails.issueDate,
+                    expiryDate: drivingLicense.drivingLicenceDetails.expiryDate,
+                    document: drivingLicense.drivingLicenceDetails.document ? {
+                        name: drivingLicense.drivingLicenceDetails.document.name,
+                        mimeType: drivingLicense.drivingLicenceDetails.document.mimeType,
+                        url: drivingLicense.drivingLicenceDetails.document.url, // Added url for document viewing
+                    } : undefined,
+                    lastUpdated: drivingLicense.drivingLicenceDetails.lastUpdated,
+                } : undefined,
             }),
             // Salary details
             ...(salary && {
@@ -158,10 +312,28 @@ export const getCompleteEmployee = async (id) => {
                 otherAllowance: salary.otherAllowance,
                 otherAllowancePercentage: salary.otherAllowancePercentage,
                 additionalAllowances: salary.additionalAllowances || [],
-                salaryHistory: salary.salaryHistory || [],
-                offerLetter: salary.offerLetter,
+                // Exclude large attachment/offerLetter.data from salary history (but include URLs)
+                salaryHistory: salary.salaryHistory ? salary.salaryHistory.map(entry => ({
+                    ...entry,
+                    attachment: entry.attachment ? {
+                        url: entry.attachment.url,
+                        name: entry.attachment.name,
+                        mimeType: entry.attachment.mimeType,
+                    } : undefined,
+                    offerLetter: entry.offerLetter ? {
+                        url: entry.offerLetter.url,
+                        name: entry.offerLetter.name,
+                        mimeType: entry.offerLetter.mimeType,
+                    } : undefined,
+                })) : [],
+                // Exclude offerLetter.data - fetch separately if needed (but include URL)
+                offerLetter: salary.offerLetter ? {
+                    url: salary.offerLetter.url,
+                    name: salary.offerLetter.name,
+                    mimeType: salary.offerLetter.mimeType,
+                } : undefined,
             }),
-            // Bank details
+            // Bank details - exclude large bankAttachment.data
             ...(bank && {
                 bankName: bank.bankName,
                 accountName: bank.accountName,
@@ -169,15 +341,32 @@ export const getCompleteEmployee = async (id) => {
                 ibanNumber: bank.ibanNumber,
                 swiftCode: bank.swiftCode,
                 bankOtherDetails: bank.bankOtherDetails,
-                bankAttachment: bank.bankAttachment,
+                // Include bankAttachment.url for viewing, exclude bankAttachment.data to reduce payload
+                bankAttachment: bank.bankAttachment ? {
+                    name: bank.bankAttachment.name,
+                    mimeType: bank.bankAttachment.mimeType,
+                    url: bank.bankAttachment.url, // Added url for document viewing
+                } : undefined,
             }),
-            // Education details
+            // Education details - exclude large certificate.data fields
             ...(education && {
-                educationDetails: education.educationDetails || [],
+                educationDetails: education.educationDetails ? education.educationDetails.map(edu => ({
+                    ...edu,
+                    certificate: edu.certificate ? {
+                        name: edu.certificate.name,
+                        mimeType: edu.certificate.mimeType,
+                    } : undefined,
+                })) : [],
             }),
-            // Experience details
+            // Experience details - exclude large certificate.data fields
             ...(experience && {
-                experienceDetails: experience.experienceDetails || [],
+                experienceDetails: experience.experienceDetails ? experience.experienceDetails.map(exp => ({
+                    ...exp,
+                    certificate: exp.certificate ? {
+                        name: exp.certificate.name,
+                        mimeType: exp.certificate.mimeType,
+                    } : undefined,
+                })) : [],
             }),
             // Emergency contact details
             ...(emergencyContact && {
@@ -186,16 +375,30 @@ export const getCompleteEmployee = async (id) => {
                 emergencyContactRelation: emergencyContact.emergencyContactRelation,
                 emergencyContactNumber: emergencyContact.emergencyContactNumber,
             }),
-            // Training details
+            // Training details from EmployeeTraining model (if exists, will override basic trainingDetails)
+            // Note: This is separate from employeeBasic.trainingDetails
             ...(training && {
-                trainingDetails: training.trainingDetails || [],
+                trainingDetailsFromTraining: training.trainingDetails ? training.trainingDetails.map(t => ({
+                    ...t,
+                    certificate: t.certificate ? {
+                        name: t.certificate.name,
+                        mimeType: t.certificate.mimeType,
+                    } : undefined,
+                })) : [],
             }),
         };
 
         return completeEmployee;
     } catch (error) {
-        console.error('Error in getCompleteEmployee:', error);
-        throw error;
+        console.error('[getCompleteEmployee] Error fetching employee:', id);
+        console.error('[getCompleteEmployee] Error details:', error.message);
+        console.error('[getCompleteEmployee] Stack trace:', error.stack);
+
+        // Re-throw with more context
+        const enhancedError = new Error(`Failed to fetch complete employee data: ${error.message}`);
+        enhancedError.originalError = error;
+        enhancedError.employeeId = id;
+        throw enhancedError;
     }
 };
 
@@ -324,14 +527,14 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
                     const vehicleAllowance = parseFloat(entry.vehicleAllowance) || 0;
                     const fuelAllowance = parseFloat(entry.fuelAllowance) || 0;
                     // Calculate additional allowances excluding vehicle and fuel (already counted separately)
-                    const additionalAllowances = Array.isArray(entry.additionalAllowances) 
+                    const additionalAllowances = Array.isArray(entry.additionalAllowances)
                         ? entry.additionalAllowances
                             .filter(item => !item.type?.toLowerCase().includes('vehicle') && !item.type?.toLowerCase().includes('fuel'))
                             .reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
                         : 0;
-                    
+
                     const totalSalary = basic + houseRentAllowance + otherAllowance + vehicleAllowance + fuelAllowance + additionalAllowances;
-                    
+
                     return {
                         ...entry,
                         totalSalary: totalSalary,
@@ -343,9 +546,9 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
                     };
                 });
             }
-            
+
             // Also calculate total for current salary if basic/otherAllowance/houseRentAllowance are being updated
-            if (salaryUpdate.basic !== undefined || salaryUpdate.otherAllowance !== undefined || 
+            if (salaryUpdate.basic !== undefined || salaryUpdate.otherAllowance !== undefined ||
                 salaryUpdate.houseRentAllowance !== undefined || salaryUpdate.additionalAllowances !== undefined) {
                 // Get current salary record to calculate total
                 const currentSalary = await EmployeeSalary.findOne({ employeeId }).lean();
@@ -353,15 +556,15 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
                 const houseRentAllowance = parseFloat(salaryUpdate.houseRentAllowance !== undefined ? salaryUpdate.houseRentAllowance : (currentSalary?.houseRentAllowance || 0)) || 0;
                 const otherAllowance = parseFloat(salaryUpdate.otherAllowance !== undefined ? salaryUpdate.otherAllowance : (currentSalary?.otherAllowance || 0)) || 0;
                 const additionalAllowances = salaryUpdate.additionalAllowances || currentSalary?.additionalAllowances || [];
-                const additionalTotal = Array.isArray(additionalAllowances) 
+                const additionalTotal = Array.isArray(additionalAllowances)
                     ? additionalAllowances.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
                     : 0;
-                
+
                 const calculatedTotal = basic + houseRentAllowance + otherAllowance + additionalTotal;
                 salaryUpdate.monthlySalary = calculatedTotal;
                 salaryUpdate.totalSalary = calculatedTotal; // Store totalSalary in DB
             }
-            
+
             updatePromises.push(
                 EmployeeSalary.findOneAndUpdate(
                     { employeeId },
@@ -419,5 +622,29 @@ export const deleteEmployeeData = async (employeeId) => {
     }
 };
 
+/**
+ * Efficiently resolve employeeId from _id or employeeId string without fetching full data
+ * @param {string} id - Employee _id or employeeId
+ * @returns {Promise<Object|null>} Object with { _id, employeeId } or null
+ */
+export const resolveEmployeeId = async (id) => {
+    try {
+        let employee;
 
+        if (mongoose.Types.ObjectId.isValid(id) && id.toString().length === 24) {
+            employee = await EmployeeBasic.findById(id, null, { maxTimeMS: 5000 }).select('employeeId').lean();
+        } else {
+            employee = await EmployeeBasic.findOne({ employeeId: id }, null, { maxTimeMS: 5000 }).select('employeeId').lean();
+        }
 
+        if (!employee) return null;
+
+        return {
+            _id: employee._id,
+            employeeId: employee.employeeId
+        };
+    } catch (error) {
+        console.error('Error resolving employee ID:', error);
+        return null;
+    }
+};

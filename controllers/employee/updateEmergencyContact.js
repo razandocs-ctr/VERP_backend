@@ -1,5 +1,5 @@
 import EmployeeEmergencyContact from "../../models/EmployeeEmergencyContact.js";
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
 
 export const updateEmergencyContact = async (req, res) => {
     const { id, contactId } = req.params;
@@ -19,8 +19,8 @@ export const updateEmergencyContact = async (req, res) => {
     const normalizedNumber = rawNumber.startsWith('+') ? rawNumber : `+${rawNumber}`;
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
+        // Get employeeId from employee record using optimized resolver
+        const employee = await resolveEmployeeId(id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }

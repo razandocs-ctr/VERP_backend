@@ -11,7 +11,9 @@ const visaDocumentSchema = new mongoose.Schema(
         expiryDate: { type: Date },
         sponsor: { type: String },
         document: {
-            data: { type: String },
+            url: { type: String }, // Cloudinary URL (preferred)
+            publicId: { type: String }, // Cloudinary public ID for deletion
+            data: { type: String }, // Base64 data (legacy, for backward compatibility)
             name: { type: String },
             mimeType: { type: String },
         },

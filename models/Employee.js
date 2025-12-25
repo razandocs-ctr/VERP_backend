@@ -183,7 +183,8 @@ const employeeSchema = new mongoose.Schema(
                 type: { type: String },
                 description: { type: String },
                 document: {
-                    data: { type: String },
+                    url: { type: String }, // Cloudinary URL (preferred)
+                    data: { type: String }, // Base64 data (legacy/fallback)
                     name: { type: String },
                     mimeType: { type: String }
                 }
@@ -199,7 +200,8 @@ const employeeSchema = new mongoose.Schema(
                 trainingDate: { type: Date },
                 trainingCost: { type: Number },
                 certificate: {
-                    data: { type: String },
+                    url: { type: String }, // Cloudinary URL (preferred)
+                    data: { type: String }, // Base64 data (legacy/fallback)
                     name: { type: String },
                     mimeType: { type: String }
                 }
@@ -223,5 +225,7 @@ const employeeSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+export default mongoose.model("Employee", employeeSchema);
 
 export default mongoose.model("Employee", employeeSchema);
