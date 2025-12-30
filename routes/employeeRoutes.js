@@ -34,8 +34,14 @@ import { getEmployeeDocument } from "../controllers/employee/getEmployeeDocument
 
 const router = express.Router();
 
+import { getLoanEligibleEmployees } from "../controllers/employee/getLoanEligibleEmployees.js";
+
 // All employee routes require authentication
 router.use(protect);
+
+// Get loan eligible employees - requires view permission
+// Place this BEFORE /:id routes to prevent conflict
+router.get("/loan-eligible", checkPermission('hrm_loan', 'view'), getLoanEligibleEmployees);
 
 // Employee list - requires view permission
 router.get("/", checkPermission('hrm_employees_list', 'view'), getEmployees);

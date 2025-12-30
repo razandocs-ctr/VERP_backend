@@ -7,6 +7,8 @@ import loginRoute from "./routes/loginRoutes.js"; // <-- Add routes
 import employeeRoute from "./routes/employeeRoutes.js"; // <-- Add employee routes
 import documentAIRoute from "./routes/documentAIRoutes.js";
 import userRoute from "./routes/userRoutes.js";
+import rewardRoute from "./routes/rewardRoutes.js";
+import fineRoute from "./routes/fineRoutes.js";
 
 dotenv.config();
 connectDB(); // <-- Call DB connection
@@ -53,6 +55,8 @@ app.use("/api/Login", loginRoute);
 app.use("/api/Employee", employeeRoute);
 app.use("/api/document-ai", documentAIRoute);
 app.use("/api/User", userRoute);
+app.use("/api/Reward", rewardRoute);
+app.use("/api/Fine", fineRoute);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));

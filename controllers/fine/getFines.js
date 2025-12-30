@@ -1,0 +1,63 @@
+import Fine from "../../models/Fine.js";
+
+export const getFines = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            search = '',
+            status,
+            type,
+            startDate,
+            endDate,
+            employeeId
+        } = req.query;
+
+        const query = {};
+
+        // Search by employee name or fine ID
+        if (search) {
+            query.$or = [
+                { employeeName: { $regex: search, $options: 'i' } },
+                { fineId: { $regex: search, $options: 'i' } },
+                { employeeId: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (status) query.fineStatus = status;
+        if (type) query.fineType = type;
+        if (employeeId) query.employeeId = employeeId;
+
+        if (startDate || endDate) {
+            query.awardedDate = {};
+            if (startDate) query.awardedDate.$gte = new Date(startDate);
+            if (endDate) query.awardedDate.$lte = new Date(endDate);
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const fines = await Fine.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit))
+            .lean();
+
+        const total = await Fine.countDocuments(query);
+
+        return res.status(200).json({
+            fines,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                pages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching fines:', error);
+        return res.status(500).json({
+            message: "Failed to fetch fines",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};

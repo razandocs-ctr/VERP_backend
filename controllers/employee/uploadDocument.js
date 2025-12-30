@@ -1,8 +1,10 @@
-import cloudinary from '../../config/cloudinary.js';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { resolveEmployeeId } from '../../services/employeeService.js';
+import s3Client, { bucketName } from '../../config/s3Client.js';
+import { randomUUID } from 'crypto';
 
 /**
- * Upload document to Cloudinary
+ * Upload document to IDrive e2 (S3 compatible)
  * This endpoint allows frontend to upload documents before saving employee data
  * This prevents blocking during save operations
  */
@@ -29,83 +31,75 @@ export const uploadDocument = async (req, res) => {
             }
         }
 
-        // Determine resource type
-        let finalResourceType = resourceType || 'auto';
-        if (finalResourceType === 'auto') {
-            if (document.startsWith('data:image/')) {
-                finalResourceType = 'image';
-            } else if (document.startsWith('data:application/pdf')) {
-                finalResourceType = 'raw';
-            } else if (document.startsWith('data:video/')) {
-                finalResourceType = 'video';
-            } else {
-                finalResourceType = 'raw';
+        // Process Base64 data
+        const base64Data = document.replace(/^data:[\w/]+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Determine Content-Type and Extension
+        let contentType = 'application/octet-stream';
+        let extension = 'bin';
+
+        const typeMatch = document.match(/^data:([\w/]+);base64,/);
+        if (typeMatch) {
+            contentType = typeMatch[1];
+            extension = contentType.split('/')[1];
+        } else {
+            // Fallback inference if header is missing but resourceType is provided
+            if (resourceType === 'image') {
+                contentType = 'image/jpeg'; // Default assumption
+                extension = 'jpg';
+            } else if (resourceType === 'raw' && fileName?.endsWith('.pdf')) {
+                contentType = 'application/pdf';
+                extension = 'pdf';
             }
         }
 
-        // Build folder path
+        // Handle PDF specific extension clarity
+        if (contentType === 'application/pdf') extension = 'pdf';
+
+        // Build folder path (S3 Key prefix)
         const folderPath = folder || (employeeId ? `employee-documents/${employeeId}` : 'employee-documents');
 
-        // Upload to Cloudinary
-        const uploadOptions = {
-            folder: folderPath,
-            resource_type: finalResourceType,
-            use_filename: true,
-            unique_filename: true,
-            overwrite: false,
+        // Generate unique filename if not provided
+        const finalFileName = fileName ? fileName : `${randomUUID()}.${extension}`;
+        const key = `${folderPath}/${finalFileName}`;
+
+        // Upload to Cloudinary (Replaced by S3)
+        const uploadParams = {
+            Bucket: bucketName,
+            Key: key,
+            Body: buffer,
+            ContentType: contentType,
+            ACL: 'public-read' // Ensure the file is publicly readable
         };
 
-        // For images, apply optimizations
-        if (finalResourceType === 'image') {
-            uploadOptions.transformation = [
-                {
-                    fetch_format: 'auto',
-                    quality: 'auto',
-                }
-            ];
-        }
+        await s3Client.send(new PutObjectCommand(uploadParams));
 
-        // Note: For raw files (PDFs), Cloudinary automatically detects the format
-        // Don't set format option for raw uploads as it's not a valid upload parameter
+        // Construct public URL
+        const endpoint = process.env.IDRIVE_ENDPOINT.startsWith('http')
+            ? process.env.IDRIVE_ENDPOINT
+            : `https://${process.env.IDRIVE_ENDPOINT}`;
 
-        const uploadResult = await cloudinary.uploader.upload(document, uploadOptions);
+        const publicUrl = `${endpoint}/${bucketName}/${key}`;
 
         return res.status(200).json({
             success: true,
-            url: uploadResult.secure_url,
-            publicId: uploadResult.public_id,
-            format: uploadResult.format,
-            resourceType: uploadResult.resource_type
+            url: publicUrl,
+            publicId: key, // Use S3 key as publicId
+            format: extension,
+            resourceType: resourceType || 'auto'
         });
     } catch (error) {
-        console.error('Error uploading document to Cloudinary:', error);
+        console.error('Error uploading document to S3:', error);
         console.error('Error details:', {
             message: error.message,
-            http_code: error.http_code,
             name: error.name,
             stack: error.stack,
-            cause: error.cause
         });
-        
-        // Check if it's a Cloudinary configuration error
-        if (error.message && error.message.includes('Invalid cloud_name')) {
-            return res.status(500).json({
-                message: 'Cloudinary configuration error. Please check your CLOUDINARY_CLOUD_NAME environment variable.',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
-            });
-        }
-        
-        if (error.message && (error.message.includes('Invalid API key') || error.message.includes('401'))) {
-            return res.status(500).json({
-                message: 'Cloudinary authentication error. Please check your CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET environment variables.',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
-            });
-        }
-        
+
         return res.status(500).json({
-            message: error.message || 'Failed to upload document to Cloudinary',
+            message: error.message || 'Failed to upload document to storage',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
-

@@ -51,19 +51,22 @@ export const getUsers = async (req, res) => {
             .map(u => u.employeeId);
 
         const employees = await EmployeeBasic.find({ employeeId: { $in: employeeIds } })
-            .select('employeeId designation')
+            .select('employeeId designation _id')
             .lean();
 
         const designationMap = {};
+        const employeeIdMap = {};
         employees.forEach(emp => {
             designationMap[emp.employeeId] = emp.designation;
+            employeeIdMap[emp.employeeId] = emp._id;
         });
 
         // Format users for response
         const formattedUsers = await Promise.all(users.map(async (user, index) => {
             const designation = user.employeeId ? designationMap[user.employeeId] : null;
+            const employeeObjectId = user.employeeId ? employeeIdMap[user.employeeId] : null;
             const isAdministrator = designation && designation.toLowerCase() === 'administrator';
-            
+
             // Check if this is the system admin user
             const isSystemAdmin = user.username?.toLowerCase() === adminUsername.toLowerCase();
 
@@ -82,7 +85,8 @@ export const getUsers = async (req, res) => {
                 createdAt: user.createdAt,
                 isAdministrator: isAdministrator,
                 isSystemAdmin: isSystemAdmin,
-                designation: designation || null
+                designation: designation || null,
+                employeeObjectId: employeeObjectId || null
             };
         }));
 

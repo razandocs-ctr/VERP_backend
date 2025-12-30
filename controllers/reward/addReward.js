@@ -1,0 +1,616 @@
+import Reward from "../../models/Reward.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import { uploadDocumentToCloudinary } from "../../utils/cloudinaryUpload.js";
+import nodemailer from "nodemailer";
+
+/**
+ * Generate auto-incrementing reward ID in format: re1322, re1323, etc.
+ * Ensures uniqueness by checking existing IDs and using atomic operations
+ */
+const generateRewardId = async () => {
+    try {
+        // Get all rewards and find the highest number (more reliable than string sorting)
+        const rewards = await Reward.find({})
+            .select('rewardId')
+            .lean();
+
+        let maxNumber = 0;
+
+        // Extract numbers from all reward IDs and find the maximum
+        rewards.forEach(reward => {
+            if (reward.rewardId) {
+                const match = reward.rewardId.match(/re(\d+)/i);
+                if (match && match[1]) {
+                    const num = parseInt(match[1], 10);
+                    if (!isNaN(num) && num > maxNumber) {
+                        maxNumber = num;
+                    }
+                }
+            }
+        });
+
+        // Start from the next number
+        let nextNumber = maxNumber + 1;
+        let newRewardId = `re${nextNumber}`;
+
+        // Ensure uniqueness - check if this ID already exists
+        let exists = await Reward.findOne({ rewardId: newRewardId }).lean();
+        let attempts = 0;
+        const maxAttempts = 100;
+
+        // Keep incrementing until we find a unique ID
+        while (exists && attempts < maxAttempts) {
+            nextNumber++;
+            newRewardId = `re${nextNumber}`;
+            exists = await Reward.findOne({ rewardId: newRewardId }).lean();
+            attempts++;
+        }
+
+        // If we couldn't find a unique sequential ID, use timestamp with random suffix
+        if (attempts >= maxAttempts || exists) {
+            const timestamp = Date.now();
+            const randomSuffix = Math.random().toString(36).substr(2, 6);
+            newRewardId = `re${timestamp}${randomSuffix}`;
+
+            // Double-check this ID is unique
+            const finalCheck = await Reward.findOne({ rewardId: newRewardId }).lean();
+            if (finalCheck) {
+                // If still exists, add more randomness
+                return `re${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+            }
+        }
+
+        return newRewardId;
+    } catch (error) {
+        console.error('Error generating reward ID:', error);
+        // Fallback: use timestamp-based ID with random suffix
+        return `re${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+};
+
+export const addReward = async (req, res) => {
+    try {
+        console.log('=== ADD REWARD START ===');
+        console.log('Request body:', JSON.stringify({ ...req.body, attachment: req.body.attachment ? '[ATTACHMENT]' : null }, null, 2));
+
+        const {
+            employeeId,
+            rewardType,
+            rewardStatus,
+            amount,
+            description,
+            awardedDate,
+            remarks,
+            attachment
+        } = req.body;
+
+        // Basic validation
+        if (!employeeId) {
+            return res.status(400).json({ message: "Employee ID is required" });
+        }
+
+        if (!rewardType) {
+            return res.status(400).json({ message: "Reward Type is required" });
+        }
+
+        console.log('Looking up employee:', employeeId);
+        // Verify employee exists
+        const employee = await EmployeeBasic.findOne({ employeeId })
+            .select('firstName lastName employeeId')
+            .lean();
+
+        if (!employee) {
+            console.log('Employee not found');
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        // Ensure employee has required fields
+        if (!employee.firstName || !employee.lastName) {
+            console.error('Employee missing name fields:', employee);
+            return res.status(400).json({ message: "Employee data is incomplete" });
+        }
+
+        const employeeName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
+        if (!employeeName) {
+            console.error('Employee name is empty:', employee);
+            return res.status(400).json({ message: "Employee name is required" });
+        }
+
+        console.log('Employee found:', employeeName);
+
+        // Validate fields based on reward type
+        if (rewardType === 'Cash Reward') {
+            // Cash Reward: amount and attachment required
+            if (!amount || isNaN(amount) || amount <= 0) {
+                return res.status(400).json({ message: "Amount is required for Cash Reward" });
+            }
+            if (!attachment || !attachment.data) {
+                return res.status(400).json({ message: "Attachment is required for Cash Reward" });
+            }
+        } else if (rewardType === 'Gift Reward') {
+            // Gift Reward: gift name (description), amount, and attachment required
+            if (!description || description.trim() === '' || !description.includes('Gift:')) {
+                return res.status(400).json({ message: "Gift name is required for Gift Reward" });
+            }
+            if (!amount || isNaN(amount) || amount <= 0) {
+                return res.status(400).json({ message: "Amount is required for Gift Reward" });
+            }
+            if (!attachment || !attachment.data) {
+                return res.status(400).json({ message: "Attachment is required for Gift Reward" });
+            }
+        } else if (rewardType === 'Certificate') {
+            // Certificate: only attachment required
+            if (!attachment || !attachment.data) {
+                return res.status(400).json({ message: "Attachment is required for Certificate" });
+            }
+        }
+
+        // Generate unique reward ID
+        console.log('Generating reward ID...');
+        let rewardId;
+        try {
+            rewardId = await generateRewardId();
+            console.log('Generated reward ID:', rewardId);
+        } catch (idError) {
+            console.error('Error generating reward ID:', idError);
+            console.error('ID error stack:', idError.stack);
+            return res.status(500).json({
+                message: "Failed to generate reward ID",
+                error: process.env.NODE_ENV === 'development' ? idError.message : undefined
+            });
+        }
+
+        // Handle attachment upload to Cloudinary
+        console.log('Processing attachment...');
+        let attachmentData = null;
+        if (attachment && attachment.data) {
+            try {
+                console.log('Uploading to Cloudinary...');
+                const base64Data = attachment.data.startsWith('data:')
+                    ? attachment.data
+                    : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+
+                const uploadResult = await uploadDocumentToCloudinary(
+                    base64Data,
+                    `rewards/${employeeId}`,
+                    attachment.name || 'reward-attachment.pdf',
+                    'raw'
+                );
+
+                attachmentData = {
+                    url: uploadResult.url,
+                    publicId: uploadResult.publicId,
+                    name: attachment.name || '',
+                    mimeType: attachment.mimeType || 'application/pdf'
+                };
+                console.log('Attachment uploaded successfully');
+            } catch (uploadError) {
+                console.error('Error uploading attachment to Cloudinary:', uploadError);
+                console.error('Upload error stack:', uploadError.stack);
+                // Fallback: store base64 data
+                attachmentData = {
+                    data: attachment.data,
+                    name: attachment.name || '',
+                    mimeType: attachment.mimeType || 'application/pdf'
+                };
+                console.log('Using base64 fallback for attachment');
+            }
+        } else {
+            console.log('No attachment provided');
+        }
+
+        // Build reward data object
+        const rewardData = {
+            rewardId,
+            employeeId,
+            employeeName: employeeName, // Use the validated employeeName from above
+            rewardType,
+            rewardStatus: rewardStatus || 'Pending',
+            awardedDate: awardedDate ? new Date(awardedDate) : new Date(),
+            remarks: remarks || ''
+        };
+
+        // Add amount based on reward type
+        if (rewardType === 'Cash Reward' || rewardType === 'Gift Reward') {
+            rewardData.amount = parseFloat(amount);
+        } else {
+            // Certificate doesn't need amount
+            rewardData.amount = null;
+        }
+
+        // Add description based on reward type
+        if (rewardType === 'Gift Reward') {
+            rewardData.description = description || '';
+        } else {
+            // Cash Reward and Certificate don't need description
+            rewardData.description = '';
+        }
+
+        // Add attachment if available
+        if (attachmentData) {
+            rewardData.attachment = attachmentData;
+        }
+
+        // Create and save reward
+        console.log('Creating reward object...');
+        console.log('Reward data:', JSON.stringify({ ...rewardData, attachment: rewardData.attachment ? '[ATTACHMENT]' : null }, null, 2));
+
+        let reward;
+        try {
+            reward = new Reward(rewardData);
+            console.log('Reward object created');
+        } catch (createError) {
+            console.error('Error creating Reward object:', createError);
+            console.error('Create error stack:', createError.stack);
+            return res.status(500).json({
+                message: "Failed to create reward object",
+                error: process.env.NODE_ENV === 'development' ? createError.message : undefined
+            });
+        }
+
+        // Validate before saving
+        console.log('Validating reward...');
+        const validationError = reward.validateSync();
+        if (validationError) {
+            console.error('Validation error:', validationError.errors);
+            const errors = Object.values(validationError.errors).map(err => err.message).join(', ');
+            return res.status(400).json({
+                message: errors || "Validation error",
+                errors: validationError.errors
+            });
+        }
+        console.log('Validation passed');
+
+        console.log('Saving reward to database...');
+        try {
+            const savedReward = await reward.save();
+            console.log('Reward saved successfully!');
+            console.log('Saved reward ID:', savedReward.rewardId);
+
+            // === EMAIL NOTIFICATION LOGIC ===
+            try {
+                // Fetch complete employee details to get reportee info
+                // We need to fetch again or populate the initial fetch if we didn't before.
+                // Since we need primaryReportee which is a ref, we should populate it.
+                // The initial fetch at line 97 was lean and selected specific fields.
+                // Let's do a fresh fetch to be safe and clean.
+                const employeeForEmail = await EmployeeBasic.findOne({ employeeId })
+                    .populate('primaryReportee', 'firstName lastName email employeeId')
+                    .select('firstName lastName primaryReportee')
+                    .lean();
+
+                if (employeeForEmail && employeeForEmail.primaryReportee && employeeForEmail.primaryReportee.email) {
+                    const reportee = employeeForEmail.primaryReportee;
+                    const reporteeEmail = reportee.email;
+                    const reporteeName = `${reportee.firstName} ${reportee.lastName}`.trim();
+
+                    // Email Credentials
+                    // Check all possible environment variable names
+                    const emailUser = process.env.EMAIL_USER || process.env.VERP_EMAIL || process.env.GMAIL_USER;
+                    const emailPass = process.env.EMAIL_PASS || process.env.VERP_PASS || process.env.GMAIL_PASS;
+
+                    if (emailUser && emailPass) {
+                        // Determine SMTP host based on email domain or preference
+                        let smtpHost = "smtp.office365.com"; // Default to Outlook
+                        let smtpPort = 587;
+
+                        if (emailUser.includes('@gmail.com') || process.env.GMAIL_USER) {
+                            smtpHost = "smtp.gmail.com";
+                            // For secure: false (TLS), use 587
+                        }
+
+                        console.log(`Using SMTP Host: ${smtpHost} for user: ${emailUser}`);
+
+                        const transporter = nodemailer.createTransport({
+                            host: smtpHost,
+                            port: smtpPort,
+                            secure: false, // true for 465, false for other ports
+                            auth: {
+                                user: emailUser,
+                                pass: emailPass,
+                            },
+                        });
+
+                        const subject = "Request for Reward Approval";
+
+                        // Use Configured URL or localhost fallback
+                        const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+                        const rewardListUrl = `${baseUrl}/HRM/Reward?filter=my_team`;
+
+                        const html = `
+                            <div style="font-family: Arial, sans-serif; color: #333;">
+                                <p>Dear <strong>${reporteeName}</strong>,</p>
+                                
+                                <p>This is to inform you that the employee <strong>${employeeName}</strong>, who reports to you, has been nominated for a new reward.</p>
+                                
+                                <p>Please review the reward details and take the necessary action by approving or rejecting the request at your convenience.</p>
+                                
+                                <p>Click the link below to view the reward list of your reportees:<br>
+                                <a href="${rewardListUrl}" style="color: #007bff; text-decoration: none;">${rewardListUrl}</a></p>
+                                
+                                <p>Thank you for your support.</p>
+                                
+                                <p>Best regards,<br>
+                                <strong>VeRP System</strong><br>
+                                <a href="mailto:VeRP@vitsllc.com" style="color: #333; text-decoration: none;">VeRP@vitsllc.com</a></p>
+                            </div>
+                        `;
+
+                        // Send Email
+                        try {
+                            const info = await transporter.sendMail({
+                                from: `"VeRP System" <${emailUser}>`,
+                                to: reporteeEmail,
+                                subject: subject,
+                                html: html,
+                            });
+                            console.log(`[DEBUG] Email sent successfully. MessageID: ${info.messageId}`);
+                            console.log(`Approval email sent to ${reporteeEmail}`);
+                        } catch (sendError) {
+                            console.error('[DEBUG] Transporter Send Error:', sendError);
+                        }
+                    } else {
+                        console.log('Email credentials missing, skipping notification.');
+                    }
+                } else {
+                    console.log('No primary reportee found or email missing, skipping notification.');
+                }
+            } catch (emailError) {
+                console.error('Failed to send approval email:', emailError);
+                // Don't block the response, just log the error
+            }
+
+            return res.status(201).json({
+                message: "Reward created successfully and approval request sent to reportee.",
+                reward: savedReward
+            });
+        } catch (saveError) {
+            console.error('=== ERROR SAVING REWARD ===');
+            console.error('Save error:', saveError);
+            console.error('Save error code:', saveError.code);
+            console.error('Save error name:', saveError.name);
+            console.error('Save error message:', saveError.message);
+            console.error('Save error stack:', saveError.stack);
+
+            // If it's a duplicate key error, handle it in the outer catch
+            if (saveError.code === 11000) {
+                throw saveError; // Re-throw to be caught by outer catch for retry logic
+            }
+
+            // For other save errors, return immediately
+            if (saveError.name === 'ValidationError') {
+                const validationErrors = Object.values(saveError.errors || {})
+                    .map(err => err.message)
+                    .join(', ');
+                return res.status(400).json({
+                    message: validationErrors || "Validation error",
+                    errors: saveError.errors
+                });
+            }
+
+            return res.status(500).json({
+                message: "Failed to save reward",
+                error: process.env.NODE_ENV === 'development' ? saveError.message : undefined
+            });
+        }
+    } catch (error) {
+        console.error('=== ERROR CREATING REWARD ===');
+        console.error('Error:', error);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Error stack:', error.stack);
+
+        if (error.code === 11000) {
+            // Duplicate key error - rewardId already exists
+            // Regenerate ID and retry once
+            try {
+                const { employeeId, rewardType, rewardStatus, amount, description, awardedDate, remarks, attachment } = req.body;
+
+                const employee = await EmployeeBasic.findOne({ employeeId })
+                    .select('firstName lastName employeeId')
+                    .lean();
+
+                if (!employee) {
+                    return res.status(404).json({ message: "Employee not found" });
+                }
+
+                // Regenerate reward ID
+                const newRewardId = await generateRewardId();
+
+                // Rebuild reward data
+                // Re-validate employee
+                const retryEmployee = await EmployeeBasic.findOne({ employeeId })
+                    .select('firstName lastName employeeId')
+                    .lean();
+
+                if (!retryEmployee || !retryEmployee.firstName || !retryEmployee.lastName) {
+                    return res.status(400).json({ message: "Employee data is incomplete" });
+                }
+
+                const retryEmployeeName = `${retryEmployee.firstName} ${retryEmployee.lastName}`.trim();
+
+                const retryRewardData = {
+                    rewardId: newRewardId,
+                    employeeId,
+                    employeeName: retryEmployeeName,
+                    rewardType,
+                    rewardStatus: rewardStatus || 'Pending',
+                    awardedDate: awardedDate ? new Date(awardedDate) : new Date(),
+                    remarks: remarks || ''
+                };
+
+                if (rewardType === 'Cash Reward' || rewardType === 'Gift Reward') {
+                    retryRewardData.amount = parseFloat(amount);
+                } else {
+                    retryRewardData.amount = null;
+                }
+
+                if (rewardType === 'Gift Reward') {
+                    retryRewardData.description = description || '';
+                } else {
+                    retryRewardData.description = '';
+                }
+
+                // Handle attachment for retry
+                if (attachment && attachment.data) {
+                    try {
+                        const base64Data = attachment.data.startsWith('data:')
+                            ? attachment.data
+                            : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+
+                        const uploadResult = await uploadDocumentToCloudinary(
+                            base64Data,
+                            `rewards/${employeeId}`,
+                            attachment.name || 'reward-attachment.pdf',
+                            'raw'
+                        );
+
+                        retryRewardData.attachment = {
+                            url: uploadResult.url,
+                            publicId: uploadResult.publicId,
+                            name: attachment.name || '',
+                            mimeType: attachment.mimeType || 'application/pdf'
+                        };
+                    } catch (uploadError) {
+                        retryRewardData.attachment = {
+                            data: attachment.data,
+                            name: attachment.name || '',
+                            mimeType: attachment.mimeType || 'application/pdf'
+                        };
+                    }
+                }
+
+                const retryReward = new Reward(retryRewardData);
+                await retryReward.save();
+
+                return res.status(201).json({
+                    message: "Reward created successfully",
+                    reward: retryReward
+                });
+            } catch (retryError) {
+                console.error('Retry failed:', retryError);
+                console.error('Retry error code:', retryError.code);
+
+                // If retry also fails with duplicate, use timestamp-based ID as final fallback
+                if (retryError.code === 11000) {
+                    try {
+                        const { employeeId, rewardType, rewardStatus, amount, description, awardedDate, remarks, attachment } = req.body;
+
+                        const employee = await EmployeeBasic.findOne({ employeeId })
+                            .select('firstName lastName employeeId')
+                            .lean();
+
+                        if (!employee) {
+                            return res.status(404).json({ message: "Employee not found" });
+                        }
+
+                        // Use timestamp-based ID as final fallback
+                        const fallbackId = `re${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                        // Re-validate employee for fallback
+                        const fallbackEmployee = await EmployeeBasic.findOne({ employeeId })
+                            .select('firstName lastName employeeId')
+                            .lean();
+
+                        if (!fallbackEmployee || !fallbackEmployee.firstName || !fallbackEmployee.lastName) {
+                            return res.status(400).json({ message: "Employee data is incomplete" });
+                        }
+
+                        const fallbackEmployeeName = `${fallbackEmployee.firstName} ${fallbackEmployee.lastName}`.trim();
+
+                        const fallbackRewardData = {
+                            rewardId: fallbackId,
+                            employeeId,
+                            employeeName: fallbackEmployeeName,
+                            rewardType,
+                            rewardStatus: rewardStatus || 'Pending',
+                            awardedDate: awardedDate ? new Date(awardedDate) : new Date(),
+                            remarks: remarks || ''
+                        };
+
+                        if (rewardType === 'Cash Reward' || rewardType === 'Gift Reward') {
+                            fallbackRewardData.amount = parseFloat(amount);
+                        } else {
+                            fallbackRewardData.amount = null;
+                        }
+
+                        if (rewardType === 'Gift Reward') {
+                            fallbackRewardData.description = description || '';
+                        } else {
+                            fallbackRewardData.description = '';
+                        }
+
+                        if (attachment && attachment.data) {
+                            try {
+                                const base64Data = attachment.data.startsWith('data:')
+                                    ? attachment.data
+                                    : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+
+                                const uploadResult = await uploadDocumentToCloudinary(
+                                    base64Data,
+                                    `rewards/${employeeId}`,
+                                    attachment.name || 'reward-attachment.pdf',
+                                    'raw'
+                                );
+
+                                fallbackRewardData.attachment = {
+                                    url: uploadResult.url,
+                                    publicId: uploadResult.publicId,
+                                    name: attachment.name || '',
+                                    mimeType: attachment.mimeType || 'application/pdf'
+                                };
+                            } catch (uploadError) {
+                                fallbackRewardData.attachment = {
+                                    data: attachment.data,
+                                    name: attachment.name || '',
+                                    mimeType: attachment.mimeType || 'application/pdf'
+                                };
+                            }
+                        }
+
+                        const fallbackReward = new Reward(fallbackRewardData);
+                        await fallbackReward.save();
+
+                        return res.status(201).json({
+                            message: "Reward created successfully",
+                            reward: fallbackReward
+                        });
+                    } catch (fallbackError) {
+                        console.error('Fallback also failed:', fallbackError);
+                        return res.status(500).json({
+                            message: "Failed to create reward. Please try again."
+                        });
+                    }
+                }
+
+                return res.status(400).json({
+                    message: retryError.message || "Reward ID conflict. Please try again."
+                });
+            }
+        }
+
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors || {})
+                .map(err => err.message)
+                .join(', ');
+            return res.status(400).json({
+                message: validationErrors || "Validation error",
+                errors: error.errors
+            });
+        }
+
+        console.error('=== UNEXPECTED ERROR ===');
+        console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+
+        return res.status(500).json({
+            message: error.message || "Failed to create reward. Please try again.",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
