@@ -1,15 +1,15 @@
-import { getCompleteEmployee } from "../../services/employeeService.js";
+import { getCompleteEmployee, saveEmployeeData } from "../../services/employeeService.js";
 
 // Get single employee by ID
 export const getEmployeeById = async (req, res) => {
     try {
         const { id } = req.params;
-        
+
         // Validate ID parameter
         if (!id || id.trim() === '') {
             return res.status(400).json({ message: "Employee ID is required" });
         }
-        
+
         console.log(`[getEmployeeById] Fetching employee with ID: ${id}`);
         const employee = await getCompleteEmployee(id);
 
@@ -23,16 +23,46 @@ export const getEmployeeById = async (req, res) => {
             delete employee.password;
         }
 
+        // Check for Visa Expiry and Auto-Inactivate
+        if (employee.profileStatus === 'active' && employee.visaDetails) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Compare dates without time
+
+            let isExpired = false;
+            const visaTypes = ['visit', 'employment', 'spouse'];
+
+            for (const type of visaTypes) {
+                const visa = employee.visaDetails[type];
+                if (visa && visa.expiryDate) {
+                    const expiryDate = new Date(visa.expiryDate);
+                    if (expiryDate <= today) {
+                        isExpired = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isExpired) {
+                console.log(`[getEmployeeById] Active employee ${id} has expired visa. Auto-setting to inactive.`);
+                try {
+                    await saveEmployeeData(id, { profileStatus: 'inactive' });
+                    employee.profileStatus = 'inactive'; // Update local object for response
+                } catch (updateError) {
+                    console.error('[getEmployeeById] Failed to auto-inactivate employee:', updateError);
+                }
+            }
+        }
+
         console.log(`[getEmployeeById] Successfully fetched employee: ${employee.employeeId || id}`);
-        
+
         // Calculate approximate response size for logging
         const responseSize = JSON.stringify(employee).length;
         console.log(`[getEmployeeById] Response size: ${(responseSize / 1024).toFixed(2)} KB`);
-        
+
         // Set response headers for better handling
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Length', responseSize);
-        
+
         return res.status(200).json({
             message: "Employee fetched successfully",
             employee,
@@ -40,7 +70,7 @@ export const getEmployeeById = async (req, res) => {
     } catch (error) {
         console.error('[getEmployeeById] Error:', error);
         console.error('[getEmployeeById] Stack:', error.stack);
-        return res.status(500).json({ 
+        return res.status(500).json({
             message: error.message || "Internal server error while fetching employee",
             error: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });

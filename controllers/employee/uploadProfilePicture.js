@@ -45,7 +45,7 @@ export const uploadProfilePicture = async (req, res) => {
             Key: filename,
             Body: buffer,
             ContentType: contentType,
-            ACL: 'public-read' // Explicit public access
+            ACL: 'private' // Private access, requires signed URL to view
             // No ServerSideEncryption or KMS keys specified
         };
 

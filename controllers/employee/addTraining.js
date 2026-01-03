@@ -3,12 +3,12 @@ import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeS
 
 export const addTraining = async (req, res) => {
     const { id } = req.params;
-    const { trainingName, trainingDetails, trainingFrom, trainingDate, trainingCost, trainingCertificate } = req.body;
+    const { trainingName, trainingDetails, provider, trainingDate, trainingCost, trainingCertificate } = req.body;
 
     // Validate required fields
-    if (!trainingName || !trainingFrom || !trainingDate) {
+    if (!trainingName || !provider || !trainingDate) {
         return res.status(400).json({
-            message: "Training Name, Training From, and Training Date are required"
+            message: "Training Name, Provider, and Training Date are required"
         });
     }
 
@@ -30,7 +30,7 @@ export const addTraining = async (req, res) => {
         const trainingData = {
             trainingName: trainingName.trim(),
             trainingDetails: trainingDetails ? trainingDetails.trim() : undefined,
-            trainingFrom: trainingFrom.trim(),
+            provider: provider.trim(),
             trainingDate: parsedTrainingDate,
             trainingCost: trainingCost !== undefined && trainingCost !== null && trainingCost !== '' ? Number(trainingCost) : undefined,
             trainingCertificate: trainingCertificate && trainingCertificate.data ? {

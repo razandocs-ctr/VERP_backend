@@ -1,6 +1,7 @@
 import EmployeePassport from "../../models/EmployeePassport.js";
-import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
-import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import { resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate"];
 
@@ -21,6 +22,7 @@ export const updatePassportDetails = async (req, res) => {
         passportCopy,
         passportCopyName,
         passportCopyMime,
+        isRenewal, // Check for renewal flag
     } = req.body || {};
 
     // Validate required fields
@@ -55,31 +57,50 @@ export const updatePassportDetails = async (req, res) => {
 
         const employeeId = employee.employeeId;
 
-        // Handle document upload to Cloudinary if new document provided
+        // Fetch existing passport to handle renewal/archiving
+        const existingPassport = await EmployeePassport.findOne({ employeeId });
+
+        // HANDLE RENEWAL: Archive old passport to Documents tab
+        if (isRenewal && existingPassport && existingPassport.document) {
+            console.log(`[Passport Renewal] Archiving old passport for ${employeeId}`);
+
+            const archiveDoc = {
+                type: "Passport (Expired)",
+                description: `Passport No: ${existingPassport.number || 'N/A'}, Expired: ${existingPassport.expiryDate ? new Date(existingPassport.expiryDate).toISOString().split('T')[0] : 'N/A'}`,
+                document: existingPassport.document
+            };
+
+            await EmployeeBasic.findOneAndUpdate(
+                { employeeId },
+                { $push: { documents: archiveDoc } }
+            );
+        }
+
+        // Handle document upload to IDrive (S3) if new document provided
         let documentData = undefined;
         if (passportCopy) {
-            // Check if it's already a Cloudinary URL or base64
+            // Check if it's already a URL (IDrive or otherwise)
             if (passportCopy.startsWith('http://') || passportCopy.startsWith('https://')) {
-                // Already a Cloudinary URL
+                // Already a URL
                 documentData = {
                     url: passportCopy,
                     name: passportCopyName || "",
                     mimeType: passportCopyMime || "",
                 };
             } else {
-                // Upload base64 to Cloudinary
-                const base64Data = passportCopy.startsWith('data:') ? passportCopy : `data:${passportCopyMime || 'application/pdf'};base64,${passportCopy}`;
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                // Upload base64 to IDrive
+                // Note: s3Upload utility handles base64 prefixes automatically
+                const uploadResult = await uploadDocumentToS3(
+                    passportCopy,
                     `employee-documents/${employeeId}/passport`,
                     passportCopyName || 'passport.pdf',
                     'raw'
                 );
-                
-                // Delete old document from Cloudinary if exists
-                const existingPassport = await EmployeePassport.findOne({ employeeId });
-                if (existingPassport?.document?.publicId) {
-                    await deleteDocumentFromCloudinary(existingPassport.document.publicId, 'raw');
+
+                // Delete old document from IDrive ONLY if NOT renewing
+                // If renewing, we kept the old doc in the archive, so don't delete it!
+                if (!isRenewal && existingPassport?.document?.publicId) {
+                    await deleteDocumentFromS3(existingPassport.document.publicId);
                 }
 
                 documentData = {
@@ -90,12 +111,14 @@ export const updatePassportDetails = async (req, res) => {
                 };
             }
         } else {
-            // Preserve existing document if no new one provided
-            const existingPassport = await EmployeePassport.findOne({ employeeId });
-            if (existingPassport?.document) {
+            // Preserve existing document if no new one provided AND NOT RENEWAL
+            // If renewal and no new doc provided, it effectively clears the doc (unless frontend forces a new one)
+            if (!isRenewal && existingPassport?.document) {
                 documentData = existingPassport.document;
             }
         }
+
+
 
         // Build passport payload
         const passportPayload = {

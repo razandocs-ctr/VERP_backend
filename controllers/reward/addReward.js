@@ -1,6 +1,6 @@
 import Reward from "../../models/Reward.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
-import { uploadDocumentToCloudinary } from "../../utils/cloudinaryUpload.js";
+import { uploadDocumentToS3 } from "../../utils/s3Upload.js";
 import nodemailer from "nodemailer";
 
 /**
@@ -165,13 +165,12 @@ export const addReward = async (req, res) => {
         let attachmentData = null;
         if (attachment && attachment.data) {
             try {
-                console.log('Uploading to Cloudinary...');
-                const base64Data = attachment.data.startsWith('data:')
-                    ? attachment.data
-                    : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+                console.log('Uploading to IDrive (S3)...');
+                // Ensure data is string
+                const attachmentDataStr = typeof attachment.data === 'string' ? attachment.data : String(attachment.data);
 
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                const uploadResult = await uploadDocumentToS3(
+                    attachmentDataStr,
                     `rewards/${employeeId}`,
                     attachment.name || 'reward-attachment.pdf',
                     'raw'
@@ -183,9 +182,9 @@ export const addReward = async (req, res) => {
                     name: attachment.name || '',
                     mimeType: attachment.mimeType || 'application/pdf'
                 };
-                console.log('Attachment uploaded successfully');
+                console.log('Attachment uploaded successfully to IDrive');
             } catch (uploadError) {
-                console.error('Error uploading attachment to Cloudinary:', uploadError);
+                console.error('Error uploading attachment to IDrive:', uploadError);
                 console.error('Upload error stack:', uploadError.stack);
                 // Fallback: store base64 data
                 attachmentData = {
@@ -455,12 +454,10 @@ export const addReward = async (req, res) => {
                 // Handle attachment for retry
                 if (attachment && attachment.data) {
                     try {
-                        const base64Data = attachment.data.startsWith('data:')
-                            ? attachment.data
-                            : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+                        const attachmentDataStr = typeof attachment.data === 'string' ? attachment.data : String(attachment.data);
 
-                        const uploadResult = await uploadDocumentToCloudinary(
-                            base64Data,
+                        const uploadResult = await uploadDocumentToS3(
+                            attachmentDataStr,
                             `rewards/${employeeId}`,
                             attachment.name || 'reward-attachment.pdf',
                             'raw'
@@ -543,12 +540,10 @@ export const addReward = async (req, res) => {
 
                         if (attachment && attachment.data) {
                             try {
-                                const base64Data = attachment.data.startsWith('data:')
-                                    ? attachment.data
-                                    : `data:${attachment.mimeType || 'application/pdf'};base64,${attachment.data}`;
+                                const attachmentDataStr = typeof attachment.data === 'string' ? attachment.data : String(attachment.data);
 
-                                const uploadResult = await uploadDocumentToCloudinary(
-                                    base64Data,
+                                const uploadResult = await uploadDocumentToS3(
+                                    attachmentDataStr,
                                     `rewards/${employeeId}`,
                                     attachment.name || 'reward-attachment.pdf',
                                     'raw'

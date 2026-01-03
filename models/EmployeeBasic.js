@@ -45,6 +45,7 @@ const employeeBasicSchema = new mongoose.Schema(
 
         // EMPLOYMENT INFO
         dateOfJoining: { type: Date, required: true },
+        contractJoiningDate: { type: Date }, // Mandatory field tracked by frontend
 
         // PROFILE PICTURE
         profilePicture: { type: String }, // Cloudinary URL
@@ -68,7 +69,7 @@ const employeeBasicSchema = new mongoose.Schema(
             {
                 trainingName: { type: String },
                 trainingDetails: { type: String },
-                trainingFrom: { type: String },
+                provider: { type: String },
                 trainingDate: { type: Date },
                 trainingCost: { type: Number },
                 certificate: {

@@ -16,7 +16,7 @@ const s3Client = new S3Client({
         accessKeyId: process.env.IDRIVE_ACCESS_KEY,
         secretAccessKey: process.env.IDRIVE_SECRET_KEY,
     },
-    forcePathStyle: true, // Required for some S3 compatible storages like IDrive
+    forcePathStyle: false, // Use Virtual Hosted style to avoid 302 redirects
 });
 
 export const bucketName = process.env.IDRIVE_BUCKET_NAME;

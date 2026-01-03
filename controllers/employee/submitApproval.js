@@ -5,24 +5,26 @@ export const submitApproval = async (req, res) => {
     const { id } = req.params;
 
     try {
-        // Get employeeId from employee record
-        const employee = await getCompleteEmployee(id);
-        if (!employee) {
+        // Get employee basic record
+        const employeeBasic = await getCompleteEmployee(id);
+        if (!employeeBasic) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
-        if (!employee.reportingAuthority) {
-            return res.status(400).json({ message: "Please assign a reporting authority before submitting for approval." });
+        // Strictly check for Primary Reportee
+        if (!employeeBasic.primaryReportee) {
+            return res.status(400).json({ message: "Please assign a primary reportee before submitting for approval." });
         }
 
-        const employeeId = employee.employeeId;
+        const employeeId = employeeBasic.employeeId;
 
         // Update EmployeeBasic
         const updated = await EmployeeBasic.findOneAndUpdate(
             { employeeId },
             { profileApprovalStatus: "submitted" },
             { new: true }
-        ).populate("reportingAuthority", "firstName lastName email workEmail");
+        ).populate("primaryReportee", "firstName lastName email workEmail")
+            .populate("reportingAuthority", "firstName lastName email workEmail");
 
         if (!updated) {
             return res.status(404).json({ message: "Employee not found" });

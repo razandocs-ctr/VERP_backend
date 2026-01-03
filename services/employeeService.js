@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import EmployeeBasic from "../models/EmployeeBasic.js";
 import EmployeeContact from "../models/EmployeeContact.js";
 import EmployeePersonal from "../models/EmployeePersonal.js";
@@ -14,6 +14,7 @@ import EmployeeEducation from "../models/EmployeeEducation.js";
 import EmployeeExperience from "../models/EmployeeExperience.js";
 import EmployeeEmergencyContact from "../models/EmployeeEmergencyContact.js";
 import EmployeeTraining from "../models/EmployeeTraining.js";
+import { getSignedFileUrl } from "../utils/s3Upload.js";
 
 /**
  * Get complete employee data by ID (can be _id or employeeId)
@@ -32,17 +33,17 @@ export const getCompleteEmployee = async (id) => {
             // It's an ObjectId
             employeeBasic = await EmployeeBasic.findById(id, null, queryOptions)
                 .select('-documents.document.data -trainingDetails.certificate.data')
-                .populate('reportingAuthority', 'firstName lastName employeeId')
-                .populate('primaryReportee', 'firstName lastName employeeId')
-                .populate('secondaryReportee', 'firstName lastName employeeId')
+                .populate('reportingAuthority', 'firstName lastName employeeId email workEmail')
+                .populate('primaryReportee', 'firstName lastName employeeId email workEmail')
+                .populate('secondaryReportee', 'firstName lastName employeeId email workEmail')
                 .lean();
         } else {
             // It's an employeeId (string)
             employeeBasic = await EmployeeBasic.findOne({ employeeId: id }, null, queryOptions)
                 .select('-documents.document.data -trainingDetails.certificate.data')
-                .populate('reportingAuthority', 'firstName lastName employeeId')
-                .populate('primaryReportee', 'firstName lastName employeeId')
-                .populate('secondaryReportee', 'firstName lastName employeeId')
+                .populate('reportingAuthority', 'firstName lastName employeeId email')
+                .populate('primaryReportee', 'firstName lastName employeeId email')
+                .populate('secondaryReportee', 'firstName lastName employeeId email')
                 .lean();
         }
 
@@ -130,6 +131,28 @@ export const getCompleteEmployee = async (id) => {
         // Combine all data into a single object
         // Exclude large base64 document fields from employeeBasic to reduce payload size (prevents connection reset)
         const { documents: basicDocuments, trainingDetails: basicTrainingDetails, ...employeeBasicWithoutDocs } = employeeBasic;
+
+        // Helper to get signed URL if publicId exists, otherwise keep existing URL
+        const resolveUrl = async (doc) => {
+            if (!doc) return undefined;
+            // If we have a publicId (S3 Key), generate a signed URL
+            // If not, and we have a url, it might be legacy or external, keep it
+            // Ideally we prioritized signed URL generation
+            // But wait, the previous code structure for document object inside model was:
+            // { name, mimeType, url, publicId, data }
+            // In the aggregation below, we are constructing a safe object.
+            // We need to resolve the URL here.
+
+            // BUT, we can't easily run async inside the huge object literal construction below.
+            // Strategy: Construct the object first with publicIds, then traverse and update URLs?
+            // Or better: Resolve all URLs in parallel before constructing the object?
+            // That's complex given the nested structure.
+
+            // Let's construct the object as before, but include publicId in the safe object.
+            // Then run a post-processing step to sign urls.
+            return doc;
+        };
+
         const completeEmployee = {
             ...employeeBasicWithoutDocs,
             // Include documents but exclude base64 data (metadata only) - reduces payload by ~90%
@@ -139,20 +162,22 @@ export const getCompleteEmployee = async (id) => {
                 document: doc.document ? {
                     name: doc.document.name,
                     mimeType: doc.document.mimeType,
-                    // data field excluded - fetch separately via /Employee/:id/document/:docId if needed
+                    url: doc.document.url,
+                    publicId: doc.document.publicId
                 } : undefined,
             })) : [],
             // Include training details but exclude certificate base64 data
             trainingDetails: basicTrainingDetails ? basicTrainingDetails.map(training => ({
                 trainingName: training.trainingName,
                 trainingDetails: training.trainingDetails,
-                trainingFrom: training.trainingFrom,
+                provider: training.provider || training.trainingFrom,
                 trainingDate: training.trainingDate,
                 trainingCost: training.trainingCost,
                 certificate: training.certificate ? {
                     name: training.certificate.name,
                     mimeType: training.certificate.mimeType,
-                    // data field excluded - fetch separately if needed
+                    url: training.certificate.url,
+                    publicId: training.certificate.publicId
                 } : undefined,
             })) : [],
             // Contact information
@@ -189,12 +214,11 @@ export const getCompleteEmployee = async (id) => {
                     issueDate: passport.issueDate,
                     expiryDate: passport.expiryDate,
                     placeOfIssue: passport.placeOfIssue,
-                    // Include document.url for viewing, exclude document.data to reduce payload
                     document: passport.document ? {
                         name: passport.document.name,
                         mimeType: passport.document.mimeType,
-                        url: passport.document.url, // Added url for document viewing
-                        // data field excluded - fetch separately if needed
+                        url: passport.document.url,
+                        publicId: passport.document.publicId
                     } : undefined,
                     lastUpdated: passport.lastUpdated,
                 },
@@ -210,11 +234,11 @@ export const getCompleteEmployee = async (id) => {
                         issueDate: visa.visit.issueDate,
                         expiryDate: visa.visit.expiryDate,
                         sponsor: visa.visit.sponsor,
-                        // Include document.url for viewing, exclude document.data
                         document: visa.visit.document ? {
                             name: visa.visit.document.name,
                             mimeType: visa.visit.document.mimeType,
-                            url: visa.visit.document.url, // Added url for document viewing
+                            url: visa.visit.document.url,
+                            publicId: visa.visit.document.publicId
                         } : undefined,
                         lastUpdated: visa.visit.lastUpdated,
                     } : undefined,
@@ -226,7 +250,8 @@ export const getCompleteEmployee = async (id) => {
                         document: visa.employment.document ? {
                             name: visa.employment.document.name,
                             mimeType: visa.employment.document.mimeType,
-                            url: visa.employment.document.url, // Added url for document viewing
+                            url: visa.employment.document.url,
+                            publicId: visa.employment.document.publicId
                         } : undefined,
                         lastUpdated: visa.employment.lastUpdated,
                     } : undefined,
@@ -238,7 +263,8 @@ export const getCompleteEmployee = async (id) => {
                         document: visa.spouse.document ? {
                             name: visa.spouse.document.name,
                             mimeType: visa.spouse.document.mimeType,
-                            url: visa.spouse.document.url, // Added url for document viewing
+                            url: visa.spouse.document.url,
+                            publicId: visa.spouse.document.publicId
                         } : undefined,
                         lastUpdated: visa.spouse.lastUpdated,
                     } : undefined,
@@ -253,7 +279,8 @@ export const getCompleteEmployee = async (id) => {
                     document: emiratesId.emiratesId.document ? {
                         name: emiratesId.emiratesId.document.name,
                         mimeType: emiratesId.emiratesId.document.mimeType,
-                        url: emiratesId.emiratesId.document.url, // Added url for document viewing
+                        url: emiratesId.emiratesId.document.url,
+                        publicId: emiratesId.emiratesId.document.publicId
                     } : undefined,
                     lastUpdated: emiratesId.emiratesId.lastUpdated,
                 } : undefined,
@@ -267,7 +294,8 @@ export const getCompleteEmployee = async (id) => {
                     document: labourCard.labourCard.document ? {
                         name: labourCard.labourCard.document.name,
                         mimeType: labourCard.labourCard.document.mimeType,
-                        url: labourCard.labourCard.document.url, // Added url for document viewing
+                        url: labourCard.labourCard.document.url,
+                        publicId: labourCard.labourCard.document.publicId
                     } : undefined,
                     lastUpdated: labourCard.labourCard.lastUpdated,
                 } : undefined,
@@ -282,7 +310,8 @@ export const getCompleteEmployee = async (id) => {
                     document: medicalInsurance.medicalInsurance.document ? {
                         name: medicalInsurance.medicalInsurance.document.name,
                         mimeType: medicalInsurance.medicalInsurance.document.mimeType,
-                        url: medicalInsurance.medicalInsurance.document.url, // Added url for document viewing
+                        url: medicalInsurance.medicalInsurance.document.url,
+                        publicId: medicalInsurance.medicalInsurance.document.publicId
                     } : undefined,
                     lastUpdated: medicalInsurance.medicalInsurance.lastUpdated,
                 } : undefined,
@@ -296,7 +325,8 @@ export const getCompleteEmployee = async (id) => {
                     document: drivingLicense.drivingLicenceDetails.document ? {
                         name: drivingLicense.drivingLicenceDetails.document.name,
                         mimeType: drivingLicense.drivingLicenceDetails.document.mimeType,
-                        url: drivingLicense.drivingLicenceDetails.document.url, // Added url for document viewing
+                        url: drivingLicense.drivingLicenceDetails.document.url,
+                        publicId: drivingLicense.drivingLicenceDetails.document.publicId
                     } : undefined,
                     lastUpdated: drivingLicense.drivingLicenceDetails.lastUpdated,
                 } : undefined,
@@ -304,7 +334,7 @@ export const getCompleteEmployee = async (id) => {
             // Salary details
             ...(salary && {
                 monthlySalary: salary.monthlySalary,
-                totalSalary: salary.totalSalary || salary.monthlySalary, // Use totalSalary from DB, fallback to monthlySalary
+                totalSalary: salary.totalSalary || salary.monthlySalary,
                 basic: salary.basic,
                 basicPercentage: salary.basicPercentage,
                 houseRentAllowance: salary.houseRentAllowance,
@@ -317,11 +347,13 @@ export const getCompleteEmployee = async (id) => {
                     ...entry,
                     attachment: entry.attachment ? {
                         url: entry.attachment.url,
+                        publicId: entry.attachment.publicId,
                         name: entry.attachment.name,
                         mimeType: entry.attachment.mimeType,
                     } : undefined,
                     offerLetter: entry.offerLetter ? {
                         url: entry.offerLetter.url,
+                        publicId: entry.offerLetter.publicId,
                         name: entry.offerLetter.name,
                         mimeType: entry.offerLetter.mimeType,
                     } : undefined,
@@ -329,6 +361,7 @@ export const getCompleteEmployee = async (id) => {
                 // Exclude offerLetter.data - fetch separately if needed (but include URL)
                 offerLetter: salary.offerLetter ? {
                     url: salary.offerLetter.url,
+                    publicId: salary.offerLetter.publicId,
                     name: salary.offerLetter.name,
                     mimeType: salary.offerLetter.mimeType,
                 } : undefined,
@@ -345,7 +378,8 @@ export const getCompleteEmployee = async (id) => {
                 bankAttachment: bank.bankAttachment ? {
                     name: bank.bankAttachment.name,
                     mimeType: bank.bankAttachment.mimeType,
-                    url: bank.bankAttachment.url, // Added url for document viewing
+                    url: bank.bankAttachment.url,
+                    publicId: bank.bankAttachment.publicId
                 } : undefined,
             }),
             // Education details - exclude large certificate.data fields
@@ -355,6 +389,8 @@ export const getCompleteEmployee = async (id) => {
                     certificate: edu.certificate ? {
                         name: edu.certificate.name,
                         mimeType: edu.certificate.mimeType,
+                        url: edu.certificate.url,
+                        publicId: edu.certificate.publicId
                     } : undefined,
                 })) : [],
             }),
@@ -365,6 +401,8 @@ export const getCompleteEmployee = async (id) => {
                     certificate: exp.certificate ? {
                         name: exp.certificate.name,
                         mimeType: exp.certificate.mimeType,
+                        url: exp.certificate.url,
+                        publicId: exp.certificate.publicId
                     } : undefined,
                 })) : [],
             }),
@@ -376,17 +414,183 @@ export const getCompleteEmployee = async (id) => {
                 emergencyContactNumber: emergencyContact.emergencyContactNumber,
             }),
             // Training details from EmployeeTraining model (if exists, will override basic trainingDetails)
-            // Note: This is separate from employeeBasic.trainingDetails
             ...(training && {
                 trainingDetailsFromTraining: training.trainingDetails ? training.trainingDetails.map(t => ({
                     ...t,
                     certificate: t.certificate ? {
                         name: t.certificate.name,
                         mimeType: t.certificate.mimeType,
+                        url: t.certificate.url,
+                        publicId: t.certificate.publicId
                     } : undefined,
                 })) : [],
             }),
         };
+
+        // --- POST-PROCESSING: Signed URL Generation ---
+        const signUrl = async (obj, context = 'unknown') => {
+            if (!obj) return;
+
+            let keyToSign = obj?.publicId;
+
+            // Fallback: If no publicId, try to extract key from legacy URL
+            if (!keyToSign && obj?.url && typeof obj.url === 'string' && obj.url.includes('idrivee2.com')) {
+                try {
+                    // Legacy URL format: https://[endpoint]/[bucket]/[key]
+                    // or https://[bucket].[endpoint]/[key]
+
+                    // Robust Legacy Key Extraction
+                    const urlObj = new URL(obj.url);
+                    let path = urlObj.pathname; // e.g. "/key" or "/bucket/key"
+
+                    // Remove leading slash
+                    if (path.startsWith('/')) path = path.substring(1);
+
+                    // Check if path starts with bucket name (Path Style)
+                    const bucketPrefix = `${process.env.IDRIVE_BUCKET_NAME}/`;
+                    if (path.startsWith(bucketPrefix)) {
+                        path = path.substring(bucketPrefix.length);
+                    }
+
+                    // Decode URI component (e.g. %20 -> space) to get actual key
+                    keyToSign = decodeURIComponent(path);
+
+                    // console.log(`[DEBUG] Extracted legacy key for ${context}:`, keyToSign);
+                } catch (err) {
+                    console.error(`[DEBUG] Error parsing legacy URL for ${context}:`, err);
+                }
+            }
+
+            if (keyToSign) {
+                try {
+                    const signedUrl = await getSignedFileUrl(keyToSign);
+                    if (signedUrl) {
+                        obj.url = signedUrl;
+                    } else if (context === 'profilePicture') {
+                        console.error(`[DEBUG] Profile Picture Signing Returned Null (Key: ${keyToSign})`);
+                    }
+                } catch (e) {
+                    console.error(`[DEBUG] Failed to sign URL for ${context}:`, e.message);
+                }
+            }
+        };
+
+        const signingPromises = [];
+
+        // Profile Picture
+        if (completeEmployee.profilePicture) {
+            // Handle profilePicture being a string URL directly
+            if (typeof completeEmployee.profilePicture === 'string') {
+                const url = completeEmployee.profilePicture;
+                // Create a temporary object to pass to signUrl
+                const tempObj = { url, publicId: null };
+
+                // Helper to extract key from string URL if possible
+                if (url.includes('idrivee2.com')) {
+                    try {
+                        const urlObj = new URL(url);
+                        let path = urlObj.pathname;
+                        if (path.startsWith('/')) path = path.substring(1);
+                        const bucketPrefix = `${process.env.IDRIVE_BUCKET_NAME}/`;
+                        if (path.startsWith(bucketPrefix)) {
+                            path = path.substring(bucketPrefix.length);
+                        }
+                        tempObj.publicId = decodeURIComponent(path);
+                    } catch (e) {
+                        console.error('Error parsing profile URL for key:', e);
+                    }
+                }
+
+                // Add to signing promises
+                signingPromises.push(
+                    signUrl(tempObj, 'profilePicture').then(() => {
+                        // Update the profilePicture property with the new signed URL
+                        if (tempObj.url !== url) {
+                            completeEmployee.profilePicture = tempObj.url;
+                        }
+                    })
+                );
+            } else {
+                // It's already an object (unlikely for profilePicture based on schema, but good for safety)
+                signingPromises.push(signUrl(completeEmployee.profilePicture, 'profilePicture'));
+            }
+        }
+
+        // Basic Documents
+        if (completeEmployee.documents) {
+            completeEmployee.documents.forEach((doc, idx) => {
+                if (doc.document) signingPromises.push(signUrl(doc.document, `document[${idx}]`));
+            });
+        }
+        // Basic Training
+        if (completeEmployee.trainingDetails) {
+            completeEmployee.trainingDetails.forEach((t, idx) => {
+                if (t.certificate) signingPromises.push(signUrl(t.certificate, `training[${idx}]`));
+            });
+        }
+        // Passport
+        if (completeEmployee.passportDetails?.document) {
+            signingPromises.push(signUrl(completeEmployee.passportDetails.document, 'passport'));
+        }
+        // Visa
+        if (completeEmployee.visaDetails) {
+            if (completeEmployee.visaDetails.visit?.document) signingPromises.push(signUrl(completeEmployee.visaDetails.visit.document, 'visa.visit'));
+            if (completeEmployee.visaDetails.employment?.document) signingPromises.push(signUrl(completeEmployee.visaDetails.employment.document, 'visa.employment'));
+            if (completeEmployee.visaDetails.spouse?.document) signingPromises.push(signUrl(completeEmployee.visaDetails.spouse.document, 'visa.spouse'));
+        }
+        // Emirates ID
+        if (completeEmployee.emiratesIdDetails?.document) {
+            signingPromises.push(signUrl(completeEmployee.emiratesIdDetails.document));
+        }
+        // Labour Card
+        if (completeEmployee.labourCardDetails?.document) {
+            signingPromises.push(signUrl(completeEmployee.labourCardDetails.document));
+        }
+        // Medical Insurance
+        if (completeEmployee.medicalInsuranceDetails?.document) {
+            signingPromises.push(signUrl(completeEmployee.medicalInsuranceDetails.document));
+        }
+        // Driving License
+        if (completeEmployee.drivingLicenceDetails?.document) {
+            signingPromises.push(signUrl(completeEmployee.drivingLicenceDetails.document));
+        }
+        // Salary
+        if (completeEmployee.salaryHistory) {
+            completeEmployee.salaryHistory.forEach(entry => {
+                if (entry.attachment) signingPromises.push(signUrl(entry.attachment));
+                if (entry.offerLetter) signingPromises.push(signUrl(entry.offerLetter));
+            });
+        }
+        if (completeEmployee.offerLetter) {
+            signingPromises.push(signUrl(completeEmployee.offerLetter));
+        }
+        // Bank
+        if (completeEmployee.bankAttachment) {
+            signingPromises.push(signUrl(completeEmployee.bankAttachment));
+        }
+        // Education
+        if (completeEmployee.educationDetails) {
+            completeEmployee.educationDetails.forEach(edu => {
+                if (edu.certificate) signingPromises.push(signUrl(edu.certificate));
+            });
+        }
+        // Experience
+        if (completeEmployee.experienceDetails) {
+            completeEmployee.experienceDetails.forEach(exp => {
+                if (exp.certificate) signingPromises.push(signUrl(exp.certificate));
+            });
+        }
+        // Training (External)
+        if (completeEmployee.trainingDetailsFromTraining) {
+            completeEmployee.trainingDetailsFromTraining.forEach(t => {
+                // Map trainingFrom to provider if provider is missing (for external model)
+                if (!t.provider && t.trainingFrom) t.provider = t.trainingFrom;
+                if (t.certificate) signingPromises.push(signUrl(t.certificate));
+            });
+        }
+
+        // Wait for all URLs to be signed
+        await Promise.all(signingPromises);
 
         return completeEmployee;
     } catch (error) {
@@ -421,7 +625,7 @@ export const saveEmployeeData = async (employeeId, updatePayload) => {
             'employeeId', 'firstName', 'lastName', 'role', 'department', 'designation',
             'status', 'probationPeriod', 'reportingAuthority', 'overtime',
             'profileApprovalStatus', 'profileStatus', 'email', 'password',
-            'enablePortalAccess', 'dateOfJoining', 'profilePicture', 'documents', 'trainingDetails'
+            'enablePortalAccess', 'dateOfJoining', 'contractJoiningDate', 'profilePicture', 'documents', 'trainingDetails'
         ];
 
         const contactFields = [

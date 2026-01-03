@@ -8,7 +8,7 @@ const trainingDetailSchema = new mongoose.Schema(
     {
         trainingName: { type: String, required: true },
         trainingDetails: { type: String },
-        trainingFrom: { type: String, required: true },
+        provider: { type: String, required: true },
         trainingDate: { type: Date, required: true },
         trainingCost: { type: Number },
         trainingCertificate: {

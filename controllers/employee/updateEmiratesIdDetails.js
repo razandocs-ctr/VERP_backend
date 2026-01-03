@@ -1,6 +1,6 @@
 import EmployeeEmiratesId from "../../models/EmployeeEmiratesId.js";
-import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
-import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
+import { resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "upload"];
 
@@ -62,30 +62,29 @@ export const updateEmiratesIdDetails = async (req, res) => {
             });
         }
 
-        // Handle document upload to Cloudinary if new document provided
+        // Handle document upload to IDrive (S3) if new document provided
         let documentData = undefined;
         if (upload && upload.trim() !== '') {
-            // Check if it's already a Cloudinary URL or base64
+            // Check if it's already a URL (IDrive or otherwise)
             if (upload.startsWith('http://') || upload.startsWith('https://')) {
-                // Already a Cloudinary URL
+                // Already a URL
                 documentData = {
                     url: upload,
                     name: uploadName || "",
                     mimeType: uploadMime || "",
                 };
             } else {
-                // Upload base64 to Cloudinary
-                const base64Data = upload.startsWith('data:') ? upload : `data:${uploadMime || 'application/pdf'};base64,${upload}`;
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                // Upload base64 to IDrive
+                const uploadResult = await uploadDocumentToS3(
+                    upload,
                     `employee-documents/${employeeId}/emirates-id`,
                     uploadName || 'emirates-id.pdf',
                     'raw'
                 );
-                
-                // Delete old document from Cloudinary if exists
+
+                // Delete old document from IDrive if exists
                 if (existingEmiratesId?.emiratesId?.document?.publicId) {
-                    await deleteDocumentFromCloudinary(existingEmiratesId.emiratesId.document.publicId, 'raw');
+                    await deleteDocumentFromS3(existingEmiratesId.emiratesId.document.publicId);
                 }
 
                 documentData = {

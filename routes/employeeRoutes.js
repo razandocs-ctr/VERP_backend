@@ -11,6 +11,8 @@ import { sendApprovalEmail } from "../controllers/employee/sendApprovalEmail.js"
 import { approveProfile } from "../controllers/employee/approveProfile.js";
 import { deleteEmployee } from "../controllers/employee/deleteEmployee.js";
 import { updateVisaDetails } from "../controllers/employee/updateVisaDetails.js";
+import { deleteVisaDetails } from "../controllers/employee/deleteVisaDetails.js";
+import { updateProfileStatus } from "../controllers/employee/updateProfileStatus.js";
 import { updateEmiratesIdDetails } from "../controllers/employee/updateEmiratesIdDetails.js";
 import { updateLabourCardDetails } from "../controllers/employee/updateLabourCardDetails.js";
 import { updateMedicalInsuranceDetails } from "../controllers/employee/updateMedicalInsuranceDetails.js";
@@ -61,6 +63,7 @@ router.patch("/passport/:id", checkPermission('hrm_employees_view_passport', 'ed
 
 // Update visa - requires edit permission
 router.patch("/visa/:id", checkPermission('hrm_employees_view_visa', 'edit'), updateVisaDetails);
+router.delete("/visa/:id/:type", checkPermission('hrm_employees_view_visa', 'edit'), deleteVisaDetails);
 
 // Update Emirates ID - requires edit permission
 router.patch("/emirates-id/:id", checkPermission('hrm_employees_view_passport', 'edit'), updateEmiratesIdDetails);
@@ -106,6 +109,9 @@ router.post("/:id/send-approval-email", checkPermission('hrm_employees', 'edit')
 
 // Approve profile - requires edit permission
 router.post("/:id/approve-profile", checkPermission('hrm_employees', 'edit'), approveProfile);
+
+// Update profile status (Downgrade/Reset) - requires edit permission
+router.patch("/:id/profile-status", checkPermission('hrm_employees', 'edit'), updateProfileStatus);
 
 // Get specific document - requires view permission
 router.get("/:id/document", checkPermission('hrm_employees_view', 'view'), getEmployeeDocument);

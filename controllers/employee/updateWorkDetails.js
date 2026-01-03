@@ -14,7 +14,10 @@ export const updateWorkDetails = async (req, res) => {
             "status",
             "probationPeriod",
             "designation",
-            "department"
+            "department",
+            "contractJoiningDate",
+            "profileStatus",
+            "profileApprovalStatus"
         ];
 
         // 2. Build updatePayload
@@ -75,6 +78,9 @@ export const updateWorkDetails = async (req, res) => {
                 if (probationEndDate <= today) {
                     updatePayload.status = 'Permanent';
                     updatePayload.probationPeriod = null;
+                    // MANDATORY RESET: Reset profile for re-approval upon becoming Permanent
+                    updatePayload.profileStatus = 'inactive';
+                    updatePayload.profileApprovalStatus = 'draft';
                 }
             }
         }

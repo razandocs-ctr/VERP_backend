@@ -1,6 +1,6 @@
 import Fine from "../../models/Fine.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
-import { uploadDocumentToCloudinary } from "../../utils/cloudinaryUpload.js";
+import { uploadDocumentToS3 } from "../../utils/s3Upload.js";
 
 /**
  * Generate unique random fine ID (4 digits)
@@ -89,13 +89,12 @@ export const addFine = async (req, res) => {
         let attachmentData = null;
         if (attachment && attachment.data) {
             try {
+                // Upload to IDrive (S3)
+                // Note: s3Upload utility handles base64 prefixes automatically, but we can pass raw string too
                 const attachmentDataStr = typeof attachment.data === 'string' ? attachment.data : String(attachment.data);
-                const base64Data = attachmentDataStr.startsWith('data:')
-                    ? attachmentDataStr
-                    : `data:${attachment.mimeType || 'application/pdf'};base64,${attachmentDataStr}`;
 
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                const uploadResult = await uploadDocumentToS3(
+                    attachmentDataStr,
                     `fines/${employeeId}`,
                     attachment.name || 'fine-attachment.pdf',
                     'raw'
@@ -108,7 +107,8 @@ export const addFine = async (req, res) => {
                     mimeType: attachment.mimeType || 'application/pdf'
                 };
             } catch (uploadError) {
-                console.error('Error uploading attachment to Cloudinary:', uploadError);
+                console.error('Error uploading attachment to IDrive:', uploadError);
+                // Fallback: store base64 data directly if upload fails
                 attachmentData = {
                     data: typeof attachment.data === 'string' ? attachment.data : String(attachment.data),
                     name: attachment.name || '',

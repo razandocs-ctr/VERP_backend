@@ -1,6 +1,6 @@
 import EmployeeDrivingLicense from "../../models/EmployeeDrivingLicense.js";
-import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
-import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
+import { resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
 const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "document"];
 
@@ -62,30 +62,29 @@ export const updateDrivingLicenseDetails = async (req, res) => {
             });
         }
 
-        // Handle document upload to Cloudinary if new document provided
+        // Handle document upload to IDrive (S3) if new document provided
         let documentData = undefined;
         if (document && document.trim() !== '') {
-            // Check if it's already a Cloudinary URL or base64
+            // Check if it's already a URL (IDrive or otherwise)
             if (document.startsWith('http://') || document.startsWith('https://')) {
-                // Already a Cloudinary URL
+                // Already a URL
                 documentData = {
                     url: document,
                     name: documentName || "",
                     mimeType: documentMime || "",
                 };
             } else {
-                // Upload base64 to Cloudinary
-                const base64Data = document.startsWith('data:') ? document : `data:${documentMime || 'application/pdf'};base64,${document}`;
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                // Upload base64 to IDrive
+                const uploadResult = await uploadDocumentToS3(
+                    document,
                     `employee-documents/${employeeId}/driving-license`,
                     documentName || 'driving-license.pdf',
                     'raw'
                 );
-                
-                // Delete old document from Cloudinary if exists
+
+                // Delete old document from IDrive if exists
                 if (existingDrivingLicense?.drivingLicenceDetails?.document?.publicId) {
-                    await deleteDocumentFromCloudinary(existingDrivingLicense.drivingLicenceDetails.document.publicId, 'raw');
+                    await deleteDocumentFromS3(existingDrivingLicense.drivingLicenceDetails.document.publicId);
                 }
 
                 documentData = {

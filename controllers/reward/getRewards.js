@@ -1,6 +1,7 @@
 import Reward from "../../models/Reward.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
 import mongoose from "mongoose";
+import { getSignedFileUrl } from "../../utils/s3Upload.js";
 
 export const getRewards = async (req, res) => {
     // Check database connection first
@@ -93,9 +94,18 @@ export const getRewards = async (req, res) => {
             Reward.countDocuments(filters, queryOptions),
         ]);
 
+        // Sign Attachment URLs
+        const signedRewards = await Promise.all(rewards.map(async (reward) => {
+            if (reward.attachment?.publicId) {
+                const signedUrl = await getSignedFileUrl(reward.attachment.publicId);
+                reward.attachment.url = signedUrl;
+            }
+            return reward;
+        }));
+
         return res.status(200).json({
             message: "Rewards fetched successfully",
-            rewards,
+            rewards: signedRewards,
             pagination: {
                 page,
                 limit,
@@ -117,6 +127,8 @@ export const getRewards = async (req, res) => {
         });
     }
 };
+
+
 
 
 

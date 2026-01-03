@@ -1,6 +1,6 @@
 import EmployeeVisa from "../../models/EmployeeVisa.js";
-import { getCompleteEmployee, resolveEmployeeId } from "../../services/employeeService.js";
-import { uploadDocumentToCloudinary, deleteDocumentFromCloudinary } from "../../utils/cloudinaryUpload.js";
+import { resolveEmployeeId } from "../../services/employeeService.js";
+import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
 const ALLOWED_VISA_TYPES = ["visit", "employment", "spouse"];
 
@@ -78,30 +78,29 @@ export const updateVisaDetails = async (req, res) => {
             });
         }
 
-        // Handle document upload to Cloudinary if new document provided
+        // Handle document upload to IDrive (S3) if new document provided
         let documentData = undefined;
         if (visaCopy && visaCopy.trim() !== '') {
-            // Check if it's already a Cloudinary URL or base64
+            // Check if it's already a URL (IDrive or otherwise)
             if (visaCopy.startsWith('http://') || visaCopy.startsWith('https://')) {
-                // Already a Cloudinary URL
+                // Already a URL
                 documentData = {
                     url: visaCopy,
                     name: visaCopyName || "",
                     mimeType: visaCopyMime || "",
                 };
             } else {
-                // Upload base64 to Cloudinary
-                const base64Data = visaCopy.startsWith('data:') ? visaCopy : `data:${visaCopyMime || 'application/pdf'};base64,${visaCopy}`;
-                const uploadResult = await uploadDocumentToCloudinary(
-                    base64Data,
+                // Upload base64 to IDrive
+                const uploadResult = await uploadDocumentToS3(
+                    visaCopy,
                     `employee-documents/${employeeId}/visa/${visaType}`,
                     visaCopyName || `${visaType}-visa.pdf`,
                     'raw'
                 );
-                
-                // Delete old document from Cloudinary if exists
+
+                // Delete old document from IDrive if exists
                 if (existingVisa?.[visaType]?.document?.publicId) {
-                    await deleteDocumentFromCloudinary(existingVisa[visaType].document.publicId, 'raw');
+                    await deleteDocumentFromS3(existingVisa[visaType].document.publicId);
                 }
 
                 documentData = {

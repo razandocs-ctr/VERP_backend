@@ -1,4 +1,5 @@
 import Fine from "../../models/Fine.js";
+import { getSignedFileUrl } from "../../utils/s3Upload.js";
 
 export const getFines = async (req, res) => {
     try {
@@ -42,10 +43,19 @@ export const getFines = async (req, res) => {
             .limit(parseInt(limit))
             .lean();
 
+        // Sign Attachment URLs
+        const signedFines = await Promise.all(fines.map(async (fine) => {
+            if (fine.attachment?.publicId) {
+                const signedUrl = await getSignedFileUrl(fine.attachment.publicId);
+                fine.attachment.url = signedUrl;
+            }
+            return fine;
+        }));
+
         const total = await Fine.countDocuments(query);
 
         return res.status(200).json({
-            fines,
+            fines: signedFines,
             pagination: {
                 total,
                 page: parseInt(page),
