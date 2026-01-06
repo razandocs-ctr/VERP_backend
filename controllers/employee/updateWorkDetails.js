@@ -16,6 +16,7 @@ export const updateWorkDetails = async (req, res) => {
             "designation",
             "department",
             "contractJoiningDate",
+            "dateOfJoining",
             "profileStatus",
             "profileApprovalStatus"
         ];

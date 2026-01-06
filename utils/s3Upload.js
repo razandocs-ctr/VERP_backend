@@ -25,14 +25,24 @@ export const uploadDocumentToS3 = async (base64Data, folder = 'employee-document
         if (typeMatch) {
             contentType = typeMatch[1];
             extension = contentType.split('/')[1];
+        } else if (fileName) {
+            // Fallback: Infer from filename extension
+            const lowerName = fileName.toLowerCase();
+            if (lowerName.endsWith('.pdf')) {
+                contentType = 'application/pdf';
+                extension = 'pdf';
+            } else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+                contentType = 'image/jpeg';
+                extension = 'jpg';
+            } else if (lowerName.endsWith('.png')) {
+                contentType = 'image/png';
+                extension = 'png';
+            }
         } else {
-            // Fallback inference
+            // Further fallback based on resourceType
             if (resourceType === 'image') {
                 contentType = 'image/jpeg';
                 extension = 'jpg';
-            } else if (resourceType === 'raw' && fileName?.endsWith('.pdf')) {
-                contentType = 'application/pdf';
-                extension = 'pdf';
             }
         }
 

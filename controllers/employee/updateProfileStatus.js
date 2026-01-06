@@ -26,6 +26,14 @@ export const updateProfileStatus = async (req, res) => {
         }
 
         employee.profileApprovalStatus = status;
+
+        // Sync profileStatus based on approval status
+        if (status === 'draft') {
+            employee.profileStatus = 'inactive';
+        } else if (status === 'active') {
+            employee.profileStatus = 'active';
+        }
+
         await employee.save();
 
         console.log(`[updateProfileStatus] Updated status to ${status} for ${employee.employeeId}`);

@@ -221,7 +221,26 @@ const employeeSchema = new mongoose.Schema(
                 totalSalary: { type: Number, default: 0 },
                 createdAt: { type: Date, default: Date.now }
             }
-        ]
+        ],
+
+        // NOTICE REQUEST
+        noticeRequest: {
+            duration: { type: String }, // "1 Month", "2 Months", "3 Months"
+            reason: { type: String, enum: ["Termination", "Resignation"] },
+            attachment: {
+                url: { type: String },
+                name: { type: String },
+                mimeType: { type: String },
+                data: { type: String },
+                publicId: { type: String }
+            },
+            status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
+            originalStatus: { type: String }, // To revert if rejected
+            requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Or Employee ID string depending on auth
+            requestedAt: { type: Date, default: Date.now },
+            actionedAt: { type: Date },
+            actionedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee" }
+        }
     },
     { timestamps: true }
 );

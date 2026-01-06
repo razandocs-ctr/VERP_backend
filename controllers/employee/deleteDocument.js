@@ -1,0 +1,44 @@
+import EmployeeBasic from "../../models/EmployeeBasic.js";
+import mongoose from "mongoose";
+
+// @desc    Delete a document from employee's documents list
+// @route   DELETE /api/Employee/:id/document/:index
+// @access  Private
+export const deleteDocument = async (req, res) => {
+    try {
+        const { id, index } = req.params;
+
+        let employee = await EmployeeBasic.findOne({ employeeId: id });
+
+        if (!employee && mongoose.Types.ObjectId.isValid(id)) {
+            employee = await EmployeeBasic.findById(id);
+        }
+
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found" });
+        }
+
+        // Validate index
+        const docIndex = parseInt(index);
+        if (isNaN(docIndex) || docIndex < 0 || !employee.documents || docIndex >= employee.documents.length) {
+            return res.status(400).json({ message: "Invalid document index" });
+        }
+
+        // Get document to be deleted (optional: for logging or cleanup)
+        // const documentToDelete = employee.documents[docIndex];
+
+        // Remove document from array
+        employee.documents.splice(docIndex, 1);
+
+        const updatedEmployee = await employee.save();
+
+        res.status(200).json({
+            message: "Document deleted successfully",
+            employee: updatedEmployee
+        });
+
+    } catch (error) {
+        console.error("Error deleting document:", error);
+        res.status(500).json({ message: "Server error", error: error.message });
+    }
+};

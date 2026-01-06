@@ -1,5 +1,6 @@
 import EmployeeVisa from "../../models/EmployeeVisa.js";
 import { resolveEmployeeId } from "../../services/employeeService.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
 import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
 const ALLOWED_VISA_TYPES = ["visit", "employment", "spouse"];
@@ -135,6 +136,21 @@ export const updateVisaDetails = async (req, res) => {
             },
             { upsert: true, new: true }
         );
+
+        // Check for Visa Expiry and Update Status
+        const expiryCheck = new Date(parsedExpiryDate);
+        const todayCheck = new Date();
+        expiryCheck.setHours(0, 0, 0, 0);
+        todayCheck.setHours(0, 0, 0, 0);
+
+        if (expiryCheck <= todayCheck) {
+            // If the visa being updated is expired, set employee status to Inactive
+            // Only update if currently 'Active' to avoid overwriting other statuses like 'Terminated' or 'Resigned'
+            await EmployeeBasic.updateOne(
+                { employeeId: employeeId, status: 'Active' },
+                { $set: { status: 'Inactive' } }
+            );
+        }
 
         return res.json({
             message: `${visaType} visa details updated successfully.`,

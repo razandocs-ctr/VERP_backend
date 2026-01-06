@@ -589,6 +589,11 @@ export const getCompleteEmployee = async (id) => {
             });
         }
 
+        // Notice Request Attachment
+        if (completeEmployee.noticeRequest?.attachment) {
+            signingPromises.push(signUrl(completeEmployee.noticeRequest.attachment));
+        }
+
         // Wait for all URLs to be signed
         await Promise.all(signingPromises);
 

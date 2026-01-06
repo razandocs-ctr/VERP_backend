@@ -30,6 +30,9 @@ import { updateTraining } from "../controllers/employee/updateTraining.js";
 import { deleteTraining } from "../controllers/employee/deleteTraining.js";
 import { uploadProfilePicture } from "../controllers/employee/uploadProfilePicture.js";
 import { uploadDocument } from "../controllers/employee/uploadDocument.js";
+import { deleteDocument } from "../controllers/employee/deleteDocument.js";
+import { addDocument } from "../controllers/employee/addDocument.js";
+import { updateDocument } from "../controllers/employee/updateDocument.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { checkPermission } from "../middleware/permissionMiddleware.js";
 import { getEmployeeDocument } from "../controllers/employee/getEmployeeDocument.js";
@@ -37,6 +40,7 @@ import { getEmployeeDocument } from "../controllers/employee/getEmployeeDocument
 const router = express.Router();
 
 import { getLoanEligibleEmployees } from "../controllers/employee/getLoanEligibleEmployees.js";
+import { requestNotice, updateNoticeStatus } from "../controllers/employee/noticeController.js";
 
 // All employee routes require authentication
 router.use(protect);
@@ -82,6 +86,9 @@ router.post("/upload-profile-picture/:id", checkPermission('hrm_employees_view_b
 
 // Upload document to Cloudinary - requires edit permission
 router.post("/upload-document/:id", checkPermission('hrm_employees_view', 'edit'), uploadDocument);
+router.post("/:id/document", checkPermission('hrm_employees_view', 'edit'), addDocument);
+router.patch("/:id/document/:index", checkPermission('hrm_employees_view', 'edit'), updateDocument);
+router.delete("/:id/document/:index", checkPermission('hrm_employees_view', 'edit'), deleteDocument);
 
 // All :id specific routes must come before the generic :id route
 // Emergency contacts - requires edit permission
@@ -112,6 +119,12 @@ router.post("/:id/approve-profile", checkPermission('hrm_employees', 'edit'), ap
 
 // Update profile status (Downgrade/Reset) - requires edit permission
 router.patch("/:id/profile-status", checkPermission('hrm_employees', 'edit'), updateProfileStatus);
+
+// Notice Request - requires work details edit permission
+router.post("/:id/request-notice", checkPermission('hrm_employees_view_work', 'edit'), requestNotice);
+
+// Update Notice Status (Approve/Reject) - requires work details edit permission
+router.patch("/:id/update-notice-status", checkPermission('hrm_employees_view_work', 'edit'), updateNoticeStatus);
 
 // Get specific document - requires view permission
 router.get("/:id/document", checkPermission('hrm_employees_view', 'view'), getEmployeeDocument);

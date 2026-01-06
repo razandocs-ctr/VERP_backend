@@ -169,8 +169,8 @@ export const getEmployeeDocument = async (req, res) => {
                     return res.status(404).json({ message: "Salary record not found" });
                 }
                 // Try to find the history item by _id
-                const historyItem = sl?.salaryHistory?.id(docId) || 
-                                   sl?.salaryHistory?.find(entry => entry._id?.toString() === docId.toString());
+                const historyItem = sl?.salaryHistory?.id(docId) ||
+                    sl?.salaryHistory?.find(entry => entry._id?.toString() === docId.toString());
                 if (historyItem?.offerLetter) {
                     // Check if it's a Cloudinary URL (new format) or base64 (old format)
                     documentData = historyItem.offerLetter.url || historyItem.offerLetter.data;
@@ -178,6 +178,16 @@ export const getEmployeeDocument = async (req, res) => {
                     mimeType = historyItem.offerLetter.mimeType;
                 } else {
                     return res.status(404).json({ message: "Offer letter not found for this salary history entry" });
+                }
+                break;
+
+            case 'notice':
+                const noticeEmp = await EmployeeBasic.findOne({ employeeId });
+                if (noticeEmp?.noticeRequest?.attachment) {
+                    // Check if it's a Cloudinary URL (new format) or base64 (old format)
+                    documentData = noticeEmp.noticeRequest.attachment.url || noticeEmp.noticeRequest.attachment.data;
+                    documentName = noticeEmp.noticeRequest.attachment.name;
+                    mimeType = noticeEmp.noticeRequest.attachment.mimeType;
                 }
                 break;
 
