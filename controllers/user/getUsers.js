@@ -76,6 +76,7 @@ export const getUsers = async (req, res) => {
                 username: user.username,
                 name: user.name,
                 email: user.email,
+                companyEmail: user.companyEmail,
                 employeeId: isSystemAdmin ? 'System Users' : (user.employeeId || '---'),
                 group: isSystemAdmin ? 'NO group Member Full Access permission' : (isAdministrator ? 'Administrator' : (user.group?.name || user.groupName || '-Not Assigned-')),
                 groupId: isSystemAdmin ? null : (isAdministrator ? 'administrator' : (user.group?._id || user.group || null)),

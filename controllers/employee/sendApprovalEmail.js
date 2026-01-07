@@ -19,7 +19,7 @@ export const sendApprovalEmail = async (req, res) => {
             return res.status(400).json({ message: "Primary reportee is not assigned for this employee." });
         }
 
-        const reporteeEmail = reportee.workEmail || reportee.email;
+        const reporteeEmail = reportee.companyEmail || reportee.workEmail || reportee.email;
         if (!reporteeEmail) {
             return res.status(400).json({ message: "Reportee email is missing." });
         }
@@ -49,7 +49,7 @@ export const sendApprovalEmail = async (req, res) => {
         // Dynamic URL logic - get base URL from headers or fallback
         const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
         const baseUrl = origin || process.env.FRONTEND_URL || "http://localhost:3000";
-        const profileUrl = `${baseUrl}/Employee/${id}`;
+        const profileUrl = `${baseUrl}/emp/${employeeBasic.employeeId}`;
 
         const html = `
             <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
@@ -77,12 +77,17 @@ export const sendApprovalEmail = async (req, res) => {
             </div>
         `;
 
+        console.log(`[Email Debug] Attempting to send email from: ${emailUser}`);
+        console.log(`[Email Debug] To: ${reporteeEmail}`);
+        console.log(`[Email Debug] Subject: ${subject}`);
+
         await transporter.sendMail({
             from: `"VeRP Portal" <${emailUser}>`,
             to: reporteeEmail,
             subject,
             html
         });
+        console.log("[Email Debug] Email sent successfully via transporter.");
 
         // Update profile approval status
         await EmployeeBasic.findByIdAndUpdate(employeeBasic._id, {
@@ -92,6 +97,8 @@ export const sendApprovalEmail = async (req, res) => {
         return res.status(200).json({ message: "Approval request sent successfully." });
     } catch (error) {
         console.error("Failed to send approval email:", error);
+        console.error("Error Code:", error?.code);
+        console.error("Error Command:", error?.command);
         return res.status(500).json({ message: error.message || "Failed to send approval email." });
     }
 };

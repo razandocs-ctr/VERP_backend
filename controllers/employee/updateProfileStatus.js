@@ -1,4 +1,4 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
 import mongoose from "mongoose";
 
 export const updateProfileStatus = async (req, res) => {
@@ -18,7 +18,7 @@ export const updateProfileStatus = async (req, res) => {
             query = { $or: [{ employeeId: id }, { _id: id }] };
         }
 
-        const employee = await Employee.findOne(query);
+        const employee = await EmployeeBasic.findOne(query);
 
         if (!employee) {
             console.log(`[updateProfileStatus] Employee not found for ID: ${id}`);

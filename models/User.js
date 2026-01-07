@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
         username: { type: String, required: true, unique: true, trim: true },
         name: { type: String, required: true },
         email: { type: String, required: true, unique: true },
+        companyEmail: { type: String, default: '', trim: true, lowercase: true },
         password: { type: String, required: false }, // hashed - optional for system admin (password stored in .env)
 
         // Link to Employee (optional - Employee can become a User)

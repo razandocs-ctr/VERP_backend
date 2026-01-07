@@ -50,6 +50,7 @@ const employeeSchema = new mongoose.Schema(
 
         // LOGIN & ACCESS
         email: { type: String, required: true, unique: true },
+        companyEmail: { type: String, default: '', trim: true, lowercase: true },
         password: { type: String }, // hashed (only if enablePortalAccess is true)
         enablePortalAccess: { type: Boolean, default: false },
 

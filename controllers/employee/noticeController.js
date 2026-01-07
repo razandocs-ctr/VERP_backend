@@ -62,43 +62,48 @@ export const requestNotice = async (req, res) => {
         const fullEmployee = await getCompleteEmployee(id);
         const reportee = fullEmployee?.primaryReportee;
 
-        if (reportee && (reportee.workEmail || reportee.email)) {
-            const reporteeName = `${reportee.firstName || ""} ${reportee.lastName || ""}`.trim();
-            const employeeName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
-            const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
-            const baseUrl = origin || process.env.FRONTEND_URL || "http://localhost:3000";
-            const profileUrl = `${baseUrl}/Employee/${id}?action=review_notice`;
+        if (reportee) {
+            const reporteeEmail = reportee.companyEmail || reportee.workEmail || reportee.email;
 
-            const html = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
-                    <div style="background-color: #000000; color: white; padding: 20px; text-align: center;">
-                        <h2 style="margin: 0;">Notice Request</h2>
-                    </div>
-                    <div style="padding: 30px;">
-                        <p>Hello <strong>${reporteeName}</strong>,</p>
-                        <p>Greetings from VeRP Portal.</p>
-                        <p>The employee below has submitted a request to initiate their notice period. Kindly review and take appropriate action by approving or rejecting the request.</p>
-                        
-                        <div style="background-color: #fff7ed; padding: 20px; border-radius: 8px; border: 1px solid #ffedd5; margin: 25px 0;">
-                            <p><strong>Employee Name:</strong> ${employeeName}</p>
-                            <p><strong>Employee ID:</strong> ${employee.employeeId}</p>
-                            <p><strong>Department:</strong> ${employee.department || 'N/A'}</p>
-                            <p><strong>Designation:</strong> ${employee.designation || 'N/A'}</p>
-                            <p><strong>Reason:</strong> ${reason}</p>
-                            <p><strong>Duration:</strong> ${duration}</p>
+            if (reporteeEmail) {
+                const reporteeName = `${reportee.firstName || ""} ${reportee.lastName || ""}`.trim();
+                const employeeName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
+                const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+                const baseUrl = origin || process.env.FRONTEND_URL || "http://localhost:3000";
+                const profileUrl = `${baseUrl}/emp/${employee.employeeId}?action=review_notice`;
+
+                const html = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+                        <div style="background-color: #000000; color: white; padding: 20px; text-align: center;">
+                            <h2 style="margin: 0;">Notice Request</h2>
                         </div>
-                        
-                        <p style="text-align: center; margin: 35px 0;">
-                            <a href="${profileUrl}" style="background-color: #f59e0b; color: white; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Review Request</a>
-                        </p>
-                        <p>Thank you for your time and attention to this matter.</p>
-                        <p>Best regards,</p>
-                        <p>The VeRP Portal Team</p>
+                        <div style="padding: 30px;">
+                            <p>Hello <strong>${reporteeName}</strong>,</p>
+                            <p>Greetings from VeRP Portal.</p>
+                            <p>The employee below has submitted a request to initiate their notice period. Kindly review and take appropriate action by approving or rejecting the request.</p>
+                            
+                            <div style="background-color: #fff7ed; padding: 20px; border-radius: 8px; border: 1px solid #ffedd5; margin: 25px 0;">
+                                <p><strong>Employee Name:</strong> ${employeeName}</p>
+                                <p><strong>Employee ID:</strong> ${employee.employeeId}</p>
+                                <p><strong>Department:</strong> ${employee.department || 'N/A'}</p>
+                                <p><strong>Designation:</strong> ${employee.designation || 'N/A'}</p>
+                                <p><strong>Reason:</strong> ${reason}</p>
+                                <p><strong>Duration:</strong> ${duration}</p>
+                            </div>
+                            
+                            <p style="text-align: center; margin: 35px 0;">
+                                <a href="${profileUrl}" style="background-color: #f59e0b; color: white; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Review Request</a>
+                            </p>
+                            <p>Thank you for your time and attention to this matter.</p>
+                            <p>Best regards,</p>
+                            <p>The VeRP Portal Team</p>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
 
-            await sendEmail(reportee.workEmail || reportee.email, `Notice Request: ${employeeName}`, html);
+                console.log(`[Email Debug] Sending Notice Request to: ${reporteeEmail}`);
+                await sendEmail(reporteeEmail, `Notice Request: ${employeeName}`, html);
+            }
         }
 
         res.status(200).json({ message: "Notice request submitted successfully." });
@@ -157,7 +162,7 @@ export const updateNoticeStatus = async (req, res) => {
         }
 
         // Notify Employee
-        const employeeEmail = employee.workEmail || employee.email;
+        const employeeEmail = employee.companyEmail || employee.workEmail || employee.email;
         if (employeeEmail) {
             const employeeName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
             const subject = `Notice Period ${status}`;

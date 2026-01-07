@@ -33,17 +33,17 @@ export const getCompleteEmployee = async (id) => {
             // It's an ObjectId
             employeeBasic = await EmployeeBasic.findById(id, null, queryOptions)
                 .select('-documents.document.data -trainingDetails.certificate.data')
-                .populate('reportingAuthority', 'firstName lastName employeeId email workEmail')
-                .populate('primaryReportee', 'firstName lastName employeeId email workEmail')
-                .populate('secondaryReportee', 'firstName lastName employeeId email workEmail')
+                .populate('reportingAuthority', 'firstName lastName employeeId email workEmail companyEmail')
+                .populate('primaryReportee', 'firstName lastName employeeId email workEmail companyEmail')
+                .populate('secondaryReportee', 'firstName lastName employeeId email workEmail companyEmail')
                 .lean();
         } else {
             // It's an employeeId (string)
             employeeBasic = await EmployeeBasic.findOne({ employeeId: id }, null, queryOptions)
                 .select('-documents.document.data -trainingDetails.certificate.data')
-                .populate('reportingAuthority', 'firstName lastName employeeId email')
-                .populate('primaryReportee', 'firstName lastName employeeId email')
-                .populate('secondaryReportee', 'firstName lastName employeeId email')
+                .populate('reportingAuthority', 'firstName lastName employeeId email workEmail companyEmail')
+                .populate('primaryReportee', 'firstName lastName employeeId email workEmail companyEmail')
+                .populate('secondaryReportee', 'firstName lastName employeeId email workEmail companyEmail')
                 .lean();
         }
 
@@ -463,11 +463,38 @@ export const getCompleteEmployee = async (id) => {
 
             if (keyToSign) {
                 try {
+                    // Sanitize Key
+                    keyToSign = decodeURIComponent(keyToSign);
+
+                    // Remove leading slash
+                    if (keyToSign.startsWith('/')) keyToSign = keyToSign.substring(1);
+
+                    // Remove bucket name prefix if present
+                    const bucketName = process.env.IDRIVE_BUCKET_NAME || 'verp-storage';
+                    if (keyToSign.startsWith(`${bucketName}/`)) {
+                        keyToSign = keyToSign.substring(bucketName.length + 1);
+                    }
+
+                    // Specific fix for malformed keys containing bucket name in middle (as reported)
+                    // If key contains bucketName that is NOT at start, it might be a concatenation error
+                    if (keyToSign.includes(bucketName)) {
+                        // Example error: path/to/fileverp-storage/path/to/file
+                        // We'll try to extract the clean path.
+                        // Assuming path starts with 'employee-documents/'
+                        const match = keyToSign.match(/^(employee-documents\/.*?)(?:verp-storage|$)/);
+                        if (match && match[1]) {
+                            keyToSign = match[1];
+                        } else {
+                            // Fallback: simple replace
+                            keyToSign = keyToSign.replace(bucketName, '').replace('//', '/');
+                        }
+                    }
+
                     const signedUrl = await getSignedFileUrl(keyToSign);
                     if (signedUrl) {
                         obj.url = signedUrl;
                     } else if (context === 'profilePicture') {
-                        console.error(`[DEBUG] Profile Picture Signing Returned Null (Key: ${keyToSign})`);
+                        // console.error(`[DEBUG] Profile Picture Signing Returned Null (Key: ${keyToSign})`);
                     }
                 } catch (e) {
                     console.error(`[DEBUG] Failed to sign URL for ${context}:`, e.message);

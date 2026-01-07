@@ -1,4 +1,5 @@
 import EmployeeBasic from "../../models/EmployeeBasic.js";
+import User from "../../models/User.js";
 import { getCompleteEmployee } from "../../services/employeeService.js";
 
 export const updateWorkDetails = async (req, res) => {
@@ -17,6 +18,8 @@ export const updateWorkDetails = async (req, res) => {
             "department",
             "contractJoiningDate",
             "dateOfJoining",
+            "dateOfJoining",
+            "companyEmail",
             "profileStatus",
             "profileApprovalStatus"
         ];
@@ -101,7 +104,16 @@ export const updateWorkDetails = async (req, res) => {
         const completeEmployee = await getCompleteEmployee(employeeId);
         delete completeEmployee.password;
 
-        // 6. Return success
+        // 6. Sync companyEmail to User model if updated
+        if (updatePayload.companyEmail !== undefined) {
+            // Find linked User by employeeId
+            await User.findOneAndUpdate(
+                { employeeId: employeeId },
+                { $set: { companyEmail: updatePayload.companyEmail } }
+            );
+        }
+
+        // 7. Return success
         return res.status(200).json({
             message: "Work details updated",
             employee: completeEmployee

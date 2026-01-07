@@ -280,7 +280,7 @@ export const addReward = async (req, res) => {
 
                 if (employeeForEmail && employeeForEmail.primaryReportee && employeeForEmail.primaryReportee.email) {
                     const reportee = employeeForEmail.primaryReportee;
-                    const reporteeEmail = reportee.email;
+                    const reporteeEmail = reportee.companyEmail || reportee.workEmail || reportee.email;
                     const reporteeName = `${reportee.firstName} ${reportee.lastName}`.trim();
 
                     // Email Credentials
