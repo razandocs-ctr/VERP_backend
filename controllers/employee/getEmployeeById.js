@@ -1,4 +1,6 @@
 import { getCompleteEmployee, saveEmployeeData } from "../../services/employeeService.js";
+import Fine from "../../models/Fine.js";
+import Reward from "../../models/Reward.js";
 
 // Get single employee by ID
 export const getEmployeeById = async (req, res) => {
@@ -51,6 +53,27 @@ export const getEmployeeById = async (req, res) => {
                     console.error('[getEmployeeById] Failed to auto-inactivate employee:', updateError);
                 }
             }
+        }
+
+        // Fetch Fines and Rewards
+        try {
+            const fines = await Fine.find({
+                "assignedEmployees.employeeId": employee.employeeId,
+                fineStatus: { $in: ["Approved", "Active", "Completed"] }
+            }).sort({ createdAt: -1 }).lean();
+
+            const rewards = await Reward.find({
+                employeeId: employee.employeeId
+            }).sort({ createdAt: -1 }).lean();
+
+            employee.fines = fines || [];
+            employee.rewards = rewards || [];
+            employee.loanAmount = 0; // Placeholder for future Loan module
+        } catch (err) {
+            console.error('[getEmployeeById] Error fetching fines/rewards:', err);
+            employee.fines = [];
+            employee.rewards = [];
+            employee.loanAmount = 0;
         }
 
         console.log(`[getEmployeeById] Successfully fetched employee: ${employee.employeeId || id}`);

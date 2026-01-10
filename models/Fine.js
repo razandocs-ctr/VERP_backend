@@ -9,17 +9,7 @@ const fineSchema = new mongoose.Schema(
         fineId: {
             type: String,
             required: true,
-            unique: true,
             index: true
-        },
-        employeeId: {
-            type: String,
-            required: true,
-            ref: "EmployeeBasic"
-        },
-        employeeName: {
-            type: String,
-            required: true
         },
         category: {
             type: String,
@@ -62,8 +52,22 @@ const fineSchema = new mongoose.Schema(
             },
             daysWorked: {
                 type: Number,
-                required: true,
-                min: 1
+                required: false, // Changed from true to support Safety/Other fines
+                min: 0 // Allow 0 if not applicable
+            },
+            approvalStatus: {
+                type: String,
+                enum: ['Pending', 'Approved', 'Rejected'],
+                default: 'Pending'
+            },
+            approvedBy: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User',
+                default: null
+            },
+            approvedAt: {
+                type: Date,
+                default: null
             }
         }],
         responsibleFor: {
@@ -132,7 +136,7 @@ const fineSchema = new mongoose.Schema(
 );
 
 // Index for faster queries
-fineSchema.index({ employeeId: 1 });
+fineSchema.index({ "assignedEmployees.employeeId": 1 });
 fineSchema.index({ fineStatus: 1 });
 fineSchema.index({ fineType: 1 });
 fineSchema.index({ createdAt: -1 });

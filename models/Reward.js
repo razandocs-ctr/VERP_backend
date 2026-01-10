@@ -58,12 +58,9 @@ const rewardSchema = new mongoose.Schema(
             type: String,
             default: ''
         },
-        attachment: {
-            url: { type: String },
-            publicId: { type: String },
-            data: { type: String },
-            name: { type: String },
-            mimeType: { type: String }
+        title: {
+            type: String,
+            required: true
         }
     },
     { timestamps: true }

@@ -4,6 +4,7 @@ import { getFines } from "../controllers/fine/getFines.js";
 import { getFineById } from "../controllers/fine/getFineById.js";
 import { updateFine } from "../controllers/fine/updateFine.js";
 import { deleteFine } from "../controllers/fine/deleteFine.js";
+import { approveFine } from "../controllers/fine/approveFine.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { checkPermission } from "../middleware/permissionMiddleware.js";
 
@@ -24,6 +25,7 @@ router.post("/", checkPermission('hrm_fine', 'create'), addFine);
 // Update fine - requires edit permission
 router.patch("/:id", checkPermission('hrm_fine', 'edit'), updateFine);
 router.put("/:id", checkPermission('hrm_fine', 'edit'), updateFine);
+router.put("/:id/approve", approveFine); // Granular approval logic handles permission internally
 
 // Delete fine - requires delete permission
 router.delete("/:id", checkPermission('hrm_fine', 'delete'), deleteFine);

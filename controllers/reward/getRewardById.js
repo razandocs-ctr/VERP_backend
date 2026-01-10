@@ -4,13 +4,36 @@ export const getRewardById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const reward = await Reward.findById(id)
-            .populate({
-                path: 'approvedBy',
-                select: 'name username',
-                options: { lean: true }
-            })
-            .lean();
+        // Custom URL handling: remove "rewrd." prefix if present
+        let searchId = id;
+        if (id && id.startsWith('rewrd.')) {
+            searchId = id.split('rewrd.')[1];
+        }
+
+        let reward;
+        const mongoose = await import('mongoose');
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(searchId);
+
+        if (isValidObjectId) {
+            reward = await Reward.findById(searchId)
+                .populate({
+                    path: 'approvedBy',
+                    select: 'name username',
+                    options: { lean: true }
+                })
+                .lean();
+        }
+
+        // If not found by ID or not an ObjectId, try finding by rewardId
+        if (!reward) {
+            reward = await Reward.findOne({ rewardId: searchId })
+                .populate({
+                    path: 'approvedBy',
+                    select: 'name username',
+                    options: { lean: true }
+                })
+                .lean();
+        }
 
         if (!reward) {
             return res.status(404).json({ message: "Reward not found" });
@@ -22,18 +45,15 @@ export const getRewardById = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching reward:', error);
-        
-        if (error.name === 'CastError') {
-            return res.status(400).json({ 
-                message: "Invalid reward ID" 
-            });
-        }
-        
-        return res.status(500).json({ 
-            message: error.message || "Failed to fetch reward" 
+
+        return res.status(500).json({
+            message: error.message || "Failed to fetch reward"
         });
     }
 };
+
+
+
 
 
 

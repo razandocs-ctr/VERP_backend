@@ -73,20 +73,11 @@ export const addReward = async (req, res) => {
         console.log('=== ADD REWARD START ===');
         console.log('Request body:', JSON.stringify({ ...req.body, attachment: req.body.attachment ? '[ATTACHMENT]' : null }, null, 2));
 
-        const {
-            employeeId,
-            rewardType,
-            rewardStatus,
-            amount,
-            description,
-            awardedDate,
-            remarks,
-            attachment
-        } = req.body;
+        const { employeeId, rewardType, amount, description, title, giftName, rewardStatus, awardedDate, remarks, attachment } = req.body;
 
         // Basic validation
-        if (!employeeId) {
-            return res.status(400).json({ message: "Employee ID is required" });
+        if (!employeeId || !rewardType || !title) {
+            return res.status(400).json({ message: "Employee ID, Title, and Reward Type are required" });
         }
 
         if (!rewardType) {
@@ -120,30 +111,20 @@ export const addReward = async (req, res) => {
 
         // Validate fields based on reward type
         if (rewardType === 'Cash Reward') {
-            // Cash Reward: amount and attachment required
+            // Cash Reward: amount required
             if (!amount || isNaN(amount) || amount <= 0) {
                 return res.status(400).json({ message: "Amount is required for Cash Reward" });
             }
-            if (!attachment || !attachment.data) {
-                return res.status(400).json({ message: "Attachment is required for Cash Reward" });
-            }
         } else if (rewardType === 'Gift Reward') {
-            // Gift Reward: gift name (description), amount, and attachment required
+            // Gift Reward: gift name (description) and amount required
             if (!description || description.trim() === '' || !description.includes('Gift:')) {
                 return res.status(400).json({ message: "Gift name is required for Gift Reward" });
             }
             if (!amount || isNaN(amount) || amount <= 0) {
                 return res.status(400).json({ message: "Amount is required for Gift Reward" });
             }
-            if (!attachment || !attachment.data) {
-                return res.status(400).json({ message: "Attachment is required for Gift Reward" });
-            }
-        } else if (rewardType === 'Certificate') {
-            // Certificate: only attachment required
-            if (!attachment || !attachment.data) {
-                return res.status(400).json({ message: "Attachment is required for Certificate" });
-            }
         }
+        // Certificate: no extra fields required beyond title (which is already checked)
 
         // Generate unique reward ID
         console.log('Generating reward ID...');
@@ -160,44 +141,6 @@ export const addReward = async (req, res) => {
             });
         }
 
-        // Handle attachment upload to Cloudinary
-        console.log('Processing attachment...');
-        let attachmentData = null;
-        if (attachment && attachment.data) {
-            try {
-                console.log('Uploading to IDrive (S3)...');
-                // Ensure data is string
-                const attachmentDataStr = typeof attachment.data === 'string' ? attachment.data : String(attachment.data);
-
-                const uploadResult = await uploadDocumentToS3(
-                    attachmentDataStr,
-                    `rewards/${employeeId}`,
-                    attachment.name || 'reward-attachment.pdf',
-                    'raw'
-                );
-
-                attachmentData = {
-                    url: uploadResult.url,
-                    publicId: uploadResult.publicId,
-                    name: attachment.name || '',
-                    mimeType: attachment.mimeType || 'application/pdf'
-                };
-                console.log('Attachment uploaded successfully to IDrive');
-            } catch (uploadError) {
-                console.error('Error uploading attachment to IDrive:', uploadError);
-                console.error('Upload error stack:', uploadError.stack);
-                // Fallback: store base64 data
-                attachmentData = {
-                    data: attachment.data,
-                    name: attachment.name || '',
-                    mimeType: attachment.mimeType || 'application/pdf'
-                };
-                console.log('Using base64 fallback for attachment');
-            }
-        } else {
-            console.log('No attachment provided');
-        }
-
         // Build reward data object
         const rewardData = {
             rewardId,
@@ -206,7 +149,8 @@ export const addReward = async (req, res) => {
             rewardType,
             rewardStatus: rewardStatus || 'Pending',
             awardedDate: awardedDate ? new Date(awardedDate) : new Date(),
-            remarks: remarks || ''
+            remarks: remarks || '',
+            title
         };
 
         // Add amount based on reward type
@@ -223,11 +167,6 @@ export const addReward = async (req, res) => {
         } else {
             // Cash Reward and Certificate don't need description
             rewardData.description = '';
-        }
-
-        // Add attachment if available
-        if (attachmentData) {
-            rewardData.attachment = attachmentData;
         }
 
         // Create and save reward
@@ -274,14 +213,20 @@ export const addReward = async (req, res) => {
                 // The initial fetch at line 97 was lean and selected specific fields.
                 // Let's do a fresh fetch to be safe and clean.
                 const employeeForEmail = await EmployeeBasic.findOne({ employeeId })
-                    .populate('primaryReportee', 'firstName lastName email employeeId')
-                    .select('firstName lastName primaryReportee')
+                    .populate('primaryReportee', 'firstName lastName email companyEmail employeeId')
+                    .select('firstName lastName employeeId department designation primaryReportee')
                     .lean();
 
                 if (employeeForEmail && employeeForEmail.primaryReportee && employeeForEmail.primaryReportee.email) {
                     const reportee = employeeForEmail.primaryReportee;
                     const reporteeEmail = reportee.companyEmail || reportee.workEmail || reportee.email;
                     const reporteeName = `${reportee.firstName} ${reportee.lastName}`.trim();
+
+                    // Employee Details
+                    const empName = `${employeeForEmail.firstName} ${employeeForEmail.lastName}`;
+                    const empId = employeeForEmail.employeeId;
+                    const empDept = employeeForEmail.department || 'N/A';
+                    const empDesig = employeeForEmail.designation || 'N/A';
 
                     // Email Credentials
                     // Check all possible environment variable names
@@ -314,24 +259,37 @@ export const addReward = async (req, res) => {
 
                         // Use Configured URL or localhost fallback
                         const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-                        const rewardListUrl = `${baseUrl}/HRM/Reward?filter=my_team`;
+                        const rewardUrl = `${baseUrl}/HRM/Reward/${savedReward.rewardId}`;
 
                         const html = `
-                            <div style="font-family: Arial, sans-serif; color: #333;">
-                                <p>Dear <strong>${reporteeName}</strong>,</p>
+                            <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+                                <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-bottom: 1px solid #eee;">
+                                    <h2 style="margin: 0; color: #1a2e35;">Request for Reward Approval</h2>
+                                </div>
                                 
-                                <p>This is to inform you that the employee <strong>${employeeName}</strong>, who reports to you, has been nominated for a new reward.</p>
+                                <div style="padding: 20px;">
+                                    <p>Dear <strong>${reporteeName}</strong>,</p>
+                                    
+                                    <p>We would like to inform you that a formal request for a <strong>${rewardType}</strong> has been initiated for the following employee:</p>
+                                    
+                                    <div style="background-color: #fce4ec; border-left: 4px solid #d81b60; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                                        <p style="margin: 5px 0;"><strong>Employee Name:</strong> ${empName}</p>
+                                        <p style="margin: 5px 0;"><strong>Employee ID:</strong> ${empId}</p>
+                                        <p style="margin: 5px 0;"><strong>Department:</strong> ${empDept}</p>
+                                        <p style="margin: 5px 0;"><strong>Designation:</strong> ${empDesig}</p>
+                                        <p style="margin: 5px 0;"><strong>Reward Type:</strong> ${rewardType}</p>
+                                    </div>
+                                    
+                                    <p>Kindly review the details and take appropriate action by approving or rejecting the request.</p>
+                                    
+                                    <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+                                        <a href="${rewardUrl}" style="background-color: #007bff; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Review Request</a>
+                                    </div>
+                                </div>
                                 
-                                <p>Please review the reward details and take the necessary action by approving or rejecting the request at your convenience.</p>
-                                
-                                <p>Click the link below to view the reward list of your reportees:<br>
-                                <a href="${rewardListUrl}" style="color: #007bff; text-decoration: none;">${rewardListUrl}</a></p>
-                                
-                                <p>Thank you for your support.</p>
-                                
-                                <p>Best regards,<br>
-                                <strong>VeRP System</strong><br>
-                                <a href="mailto:VeRP@vitsllc.com" style="color: #333; text-decoration: none;">VeRP@vitsllc.com</a></p>
+                                <div style="background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 0.8em; color: #888; border-top: 1px solid #eee;">
+                                    <p style="margin: 0;">This is an automated message from the VeRP System.<br>Please do not reply to this email.</p>
+                                </div>
                             </div>
                         `;
 

@@ -19,15 +19,20 @@ export const getFines = async (req, res) => {
         // Search by employee name or fine ID
         if (search) {
             query.$or = [
-                { employeeName: { $regex: search, $options: 'i' } },
                 { fineId: { $regex: search, $options: 'i' } },
-                { employeeId: { $regex: search, $options: 'i' } }
+                // Search inside assigned employees
+                { 'assignedEmployees.employeeName': { $regex: search, $options: 'i' } },
+                { 'assignedEmployees.employeeId': { $regex: search, $options: 'i' } }
             ];
         }
 
         if (status) query.fineStatus = status;
         if (type) query.fineType = type;
-        if (employeeId) query.employeeId = employeeId;
+
+        // Filter by Employee ID: Check only assigned list
+        if (employeeId) {
+            query['assignedEmployees.employeeId'] = employeeId;
+        }
 
         if (startDate || endDate) {
             query.awardedDate = {};
