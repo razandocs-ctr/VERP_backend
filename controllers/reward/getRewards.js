@@ -2,6 +2,7 @@ import Reward from "../../models/Reward.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
 import mongoose from "mongoose";
 import { getSignedFileUrl } from "../../utils/s3Upload.js";
+import { escapeRegex } from "../../utils/regexHelper.js";
 
 export const getRewards = async (req, res) => {
     // Check database connection first
@@ -68,7 +69,7 @@ export const getRewards = async (req, res) => {
         }
 
         if (search) {
-            const regex = new RegExp(search, 'i');
+            const regex = new RegExp(escapeRegex(search), 'i');
             filters.$or = [
                 { rewardId: regex },
                 { employeeId: regex },
@@ -127,6 +128,9 @@ export const getRewards = async (req, res) => {
         });
     }
 };
+
+
+
 
 
 

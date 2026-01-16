@@ -1,6 +1,7 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
 import { uploadDocumentToS3 } from "../../utils/s3Upload.js";
 import mongoose from "mongoose";
+import { resolveEmployeeId } from "../../services/employeeService.js";
 
 // @desc    Update a document in employee's documents list
 // @route   PATCH /api/Employee/:id/document/:index
@@ -8,25 +9,28 @@ import mongoose from "mongoose";
 export const updateDocument = async (req, res) => {
     try {
         const { id, index } = req.params;
-        const { type, expiryDate, document } = req.body;
+        const { type, description, expiryDate, document } = req.body;
 
-        let employee = await Employee.findOne({ employeeId: id });
-
-        if (!employee && mongoose.Types.ObjectId.isValid(id)) {
-            employee = await Employee.findById(id);
+        const resolved = await resolveEmployeeId(id);
+        if (!resolved) {
+            return res.status(404).json({ message: "Employee not found" });
         }
 
+        const employee = await EmployeeBasic.findById(resolved._id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
+
+
         const docIndex = parseInt(index);
-        if (isNaN(docIndex) || docIndex < 0 || docIndex >= employee.documents.length) {
+        if (isNaN(docIndex) || docIndex < 0 || !employee.documents || docIndex >= employee.documents.length) {
             return res.status(400).json({ message: "Invalid document index" });
         }
 
         // Update fields if provided
         if (type) employee.documents[docIndex].type = type;
+        if (description) employee.documents[docIndex].description = description;
         if (expiryDate !== undefined) employee.documents[docIndex].expiryDate = expiryDate;
 
         if (document) {

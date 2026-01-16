@@ -12,9 +12,13 @@ export const login = async (req, res) => {
         if (!email || !password)
             return res.status(400).json({ message: "Email/Username and Password are required" });
 
+        if (typeof email !== 'string' || typeof password !== 'string') {
+            return res.status(400).json({ message: "Email and Password must be strings" });
+        }
+
         const emailOrUsername = email.trim();
         const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-        const adminPassword = process.env.ADMIN_PASSWORD || 'IT20!!@Erp';
+        const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMeNow_Admin!123';
 
         // Check if this is the admin user from .env
         const isAdminLogin = emailOrUsername.toLowerCase() === adminUsername.toLowerCase() && password === adminPassword;

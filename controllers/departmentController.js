@@ -1,4 +1,5 @@
 import Department from "../models/Department.js";
+import { escapeRegex } from "../utils/regexHelper.js";
 
 // Create a new department
 export const createDepartment = async (req, res) => {
@@ -9,7 +10,7 @@ export const createDepartment = async (req, res) => {
             return res.status(400).json({ message: "Department name is required" });
         }
 
-        const existingDepartment = await Department.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } });
+        const existingDepartment = await Department.findOne({ name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') } });
         if (existingDepartment) {
             return res.status(400).json({ message: "Department already exists" });
         }

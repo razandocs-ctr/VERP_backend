@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Update user
+// Note: Rate limiting for this sensitive endpoint should be handled by a global middleware (e.g., express-rate-limit)
 export const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
@@ -38,11 +39,11 @@ export const updateUser = async (req, res) => {
         if (isSystemAdmin) {
             // Only allow password updates for admin user
             if (password === undefined || password === null || password === '') {
-                return res.status(400).json({ 
-                    message: "Password is required to update admin password." 
+                return res.status(400).json({
+                    message: "Password is required to update admin password."
                 });
             }
-            
+
             // Validate password requirements
             if (password.length < 8) {
                 return res.status(400).json({
@@ -64,7 +65,7 @@ export const updateUser = async (req, res) => {
                     message: "Password must contain at least one number"
                 });
             }
-            
+
             // Check if new password is different from current .env password
             const currentAdminPassword = process.env.ADMIN_PASSWORD || 'IT20!!@Erp';
             if (password === currentAdminPassword) {
@@ -72,18 +73,18 @@ export const updateUser = async (req, res) => {
                     message: "New password must be different from the current password"
                 });
             }
-            
+
             // Update .env file with new password
             try {
                 // Find .env file path
                 const envPath = path.join(__dirname, '..', '..', '.env');
-                
+
                 // Read .env file if it exists
                 let envContent = '';
                 if (fs.existsSync(envPath)) {
                     envContent = fs.readFileSync(envPath, 'utf8');
                 }
-                
+
                 // Update or add ADMIN_PASSWORD
                 const adminPasswordRegex = /^ADMIN_PASSWORD=.*$/m;
                 if (adminPasswordRegex.test(envContent)) {
@@ -91,15 +92,15 @@ export const updateUser = async (req, res) => {
                 } else {
                     envContent += (envContent ? '\n' : '') + `ADMIN_PASSWORD=${password}\n`;
                 }
-                
+
                 // Write updated content to .env file
                 fs.writeFileSync(envPath, envContent, 'utf8');
-                
+
                 // Update process.env for current session
                 process.env.ADMIN_PASSWORD = password;
-                
+
                 console.log('Admin password updated in .env file:', user.username);
-                
+
                 return res.status(200).json({
                     message: 'Admin password updated in .env file. Please restart the server for changes to take full effect.',
                     user: await User.findById(id).select('-password').populate('group', 'name'),

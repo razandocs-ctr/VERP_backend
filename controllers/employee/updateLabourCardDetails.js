@@ -2,7 +2,7 @@ import EmployeeLabourCard from "../../models/EmployeeLabourCard.js";
 import { resolveEmployeeId } from "../../services/employeeService.js";
 import { uploadDocumentToS3, deleteDocumentFromS3 } from "../../utils/s3Upload.js";
 
-const REQUIRED_FIELDS = ["number", "issueDate", "expiryDate", "upload"];
+const REQUIRED_FIELDS = ["number", "expiryDate", "upload"];
 
 const buildMissingFields = (body, existingDocument) => {
     return REQUIRED_FIELDS.filter((field) => {
@@ -46,7 +46,7 @@ export const updateLabourCardDetails = async (req, res) => {
         const existingLabourCard = await EmployeeLabourCard.findOne({ employeeId });
         const existingDocument = existingLabourCard?.labourCard?.document?.url || existingLabourCard?.labourCard?.document?.data;
 
-        const missingFields = buildMissingFields({ number, issueDate, expiryDate, upload }, existingDocument);
+        const missingFields = buildMissingFields({ number, expiryDate, upload }, existingDocument);
         if (missingFields.length > 0) {
             return res.status(400).json({
                 message: "Missing required Labour Card fields.",
@@ -56,9 +56,11 @@ export const updateLabourCardDetails = async (req, res) => {
 
         const parsedIssueDate = normalizeDate(issueDate);
         const parsedExpiryDate = normalizeDate(expiryDate);
-        if (!parsedIssueDate || !parsedExpiryDate) {
+
+        // Only validate expiryDate is valid. issueDate is optional.
+        if (!parsedExpiryDate) {
             return res.status(400).json({
-                message: "Invalid issue or expiry date provided.",
+                message: "Invalid expiry date provided.",
             });
         }
 

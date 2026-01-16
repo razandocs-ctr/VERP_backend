@@ -1,4 +1,5 @@
 import Group from "../../models/Group.js";
+import { escapeRegex } from "../../utils/regexHelper.js";
 
 // Get all groups
 export const getGroups = async (req, res) => {
@@ -11,7 +12,7 @@ export const getGroups = async (req, res) => {
             filter.status = status;
         }
         if (search) {
-            filter.name = { $regex: new RegExp(search, 'i') };
+            filter.name = { $regex: new RegExp(escapeRegex(search), 'i') };
         }
 
         const groups = await Group.find(filter)

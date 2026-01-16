@@ -30,7 +30,7 @@ const rewardSchema = new mongoose.Schema(
         rewardStatus: {
             type: String,
             required: true,
-            enum: ['Pending', 'Approved', 'Rejected', 'Cancelled', 'Active'],
+            enum: ['Pending', 'Pending Authorization', 'Approved', 'Rejected', 'Cancelled', 'Active'],
             default: 'Pending'
         },
         amount: {
@@ -61,6 +61,34 @@ const rewardSchema = new mongoose.Schema(
         title: {
             type: String,
             required: true
+        },
+        certHeader: {
+            type: String,
+            default: 'Certificate'
+        },
+        certSubHeader: {
+            type: String,
+            default: 'Of Appreciation'
+        },
+        certPresentationText: {
+            type: String,
+            default: 'This certificate is presented to'
+        },
+        certSigner1Name: {
+            type: String,
+            default: 'Nivil Ali'
+        },
+        certSigner1Title: {
+            type: String,
+            default: 'Managing Director'
+        },
+        certSigner2Name: {
+            type: String,
+            default: 'Raseel Muhammad'
+        },
+        certSigner2Title: {
+            type: String,
+            default: 'CEO'
         }
     },
     { timestamps: true }

@@ -28,7 +28,7 @@ export const updatePassportDetails = async (req, res) => {
     // Validate required fields
     const missingFields = REQUIRED_FIELDS.filter((field) => {
         const value = req.body[field];
-        return value === undefined || value === null || value === "";
+        return value === undefined || value === null || (typeof value === 'string' && value.trim() === "");
     });
 
     if (missingFields.length > 0) {
@@ -66,7 +66,8 @@ export const updatePassportDetails = async (req, res) => {
 
             const archiveDoc = {
                 type: "Passport (Expired)",
-                description: `Passport No: ${existingPassport.number || 'N/A'}, Expired: ${existingPassport.expiryDate ? new Date(existingPassport.expiryDate).toISOString().split('T')[0] : 'N/A'}`,
+                description: `Passport No: ${existingPassport.number || 'N/A'}, Expired on ${existingPassport.expiryDate ? new Date(existingPassport.expiryDate).toLocaleDateString() : 'N/A'}`,
+                expiryDate: existingPassport.expiryDate,
                 document: existingPassport.document
             };
 
@@ -120,13 +121,12 @@ export const updatePassportDetails = async (req, res) => {
 
 
 
-        // Build passport payload
         const passportPayload = {
-            number: number?.trim() || "",
-            nationality: nationality?.trim() || "",
+            number: (typeof number === 'string' ? number.trim() : number) || "",
+            nationality: (typeof nationality === 'string' ? nationality.trim() : nationality) || "",
             issueDate: parsedIssueDate,
             expiryDate: parsedExpiryDate,
-            placeOfIssue: placeOfIssue?.trim() || "",
+            placeOfIssue: (typeof placeOfIssue === 'string' ? placeOfIssue.trim() : placeOfIssue) || "",
             document: documentData,
             lastUpdated: new Date(),
             passportExp: parsedExpiryDate, // Update expiry date for quick reference

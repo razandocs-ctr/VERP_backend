@@ -44,6 +44,12 @@ export const sendFineConfirmedEmail = async (fine, assignedEmployees) => {
         const attachments = [];
         if (fine.attachment && fine.attachment.url) {
             try {
+                // Validate URL hostname to prevent SSRF
+                const urlObj = new URL(fine.attachment.url);
+                if (!urlObj.hostname.endsWith('idrivee2.com')) {
+                    throw new Error(`Invalid attachment URL hostname: ${urlObj.hostname}`);
+                }
+
                 // Fetch the file stream from the URL (Cloudinary/S3)
                 const response = await axios.get(fine.attachment.url, { responseType: 'arraybuffer' });
                 attachments.push({

@@ -1,4 +1,5 @@
 import Designation from "../models/Designation.js";
+import { escapeRegex } from "../utils/regexHelper.js";
 
 // Create a new designation
 export const createDesignation = async (req, res) => {
@@ -10,8 +11,8 @@ export const createDesignation = async (req, res) => {
         }
 
         const existingDesignation = await Designation.findOne({
-            name: { $regex: new RegExp(`^${name}$`, 'i') },
-            department: { $regex: new RegExp(`^${department}$`, 'i') }
+            name: { $regex: new RegExp(`^${escapeRegex(name)}$`, 'i') },
+            department: { $regex: new RegExp(`^${escapeRegex(department)}$`, 'i') }
         });
 
         if (existingDesignation) {

@@ -135,7 +135,33 @@ export const updateNoticeStatus = async (req, res) => {
 
         employee.noticeRequest.status = status;
         employee.noticeRequest.actionedAt = new Date();
-        if (actionedBy) employee.noticeRequest.actionedBy = actionedBy;
+
+        // Resolve actionedBy to a valid EmployeeBasic ObjectId
+        let resolvedApproverId = actionedBy;
+
+        // 1. Try to resolve from authenticated user (most reliable)
+        if (req.user) {
+            const approver = await EmployeeBasic.findOne({
+                $or: [
+                    { employeeId: req.user.employeeId },
+                    { email: req.user.email },
+                    { companyEmail: req.user.email } // Handle case where email is in companyEmail
+                ]
+            });
+            if (approver) {
+                resolvedApproverId = approver._id;
+            }
+        }
+
+        // 2. If no req.user, or failed (e.g. testing), trust valid actionedBy if it's an EmployeeBasic
+        if (!resolvedApproverId && actionedBy && mongoose.Types.ObjectId.isValid(actionedBy)) {
+            // Optional: verify it exists if needed, but for now trust if valid structure
+            resolvedApproverId = actionedBy;
+        }
+
+        if (resolvedApproverId) {
+            employee.noticeRequest.actionedBy = resolvedApproverId;
+        }
 
         if (status === "Approved") {
             employee.status = "Notice";

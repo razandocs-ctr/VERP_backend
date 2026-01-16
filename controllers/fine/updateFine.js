@@ -1,4 +1,6 @@
 import Fine from "../../models/Fine.js";
+import { sendFineRejectedEmail } from "../../utils/sendFineRejectedEmail.js";
+import { isValidStorageUrl } from "../../utils/validationHelper.js";
 
 export const updateFine = async (req, res) => {
     try {
@@ -11,6 +13,7 @@ export const updateFine = async (req, res) => {
         }
 
         // Update fields
+        const oldStatus = fine.fineStatus;
         Object.keys(updates).forEach(key => {
             if (updates[key] !== undefined) {
                 fine[key] = updates[key];
@@ -18,6 +21,21 @@ export const updateFine = async (req, res) => {
         });
 
         const updatedFine = await fine.save();
+
+        // If newly rejected, send notification
+        if (oldStatus !== 'Rejected' && updatedFine.fineStatus === 'Rejected') {
+            try {
+                if (updatedFine.attachment && updatedFine.attachment.url) {
+                    if (!isValidStorageUrl(updatedFine.attachment.url)) {
+                        console.warn('Skipping email due to invalid attachment URL hostname');
+                        return; // Skip email to prevent SSRF
+                    }
+                }
+                await sendFineRejectedEmail(updatedFine, updatedFine.assignedEmployees);
+            } catch (err) {
+                console.error("Failed to send rejection email:", err);
+            }
+        }
 
         return res.status(200).json({
             message: "Fine updated successfully",

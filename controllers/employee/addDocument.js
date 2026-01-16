@@ -1,6 +1,7 @@
-import Employee from "../../models/Employee.js";
+import EmployeeBasic from "../../models/EmployeeBasic.js";
 import { uploadDocumentToS3 } from "../../utils/s3Upload.js";
 import mongoose from "mongoose";
+import { resolveEmployeeId } from "../../services/employeeService.js";
 
 // @desc    Add a document to employee's documents list
 // @route   POST /api/Employee/:id/document
@@ -8,17 +9,19 @@ import mongoose from "mongoose";
 export const addDocument = async (req, res) => {
     try {
         const { id } = req.params;
-        const { type, expiryDate, document } = req.body;
+        const { type, description, expiryDate, document } = req.body;
 
-        let employee = await Employee.findOne({ employeeId: id });
-
-        if (!employee && mongoose.Types.ObjectId.isValid(id)) {
-            employee = await Employee.findById(id);
+        const resolved = await resolveEmployeeId(id);
+        if (!resolved) {
+            return res.status(404).json({ message: "Employee not found" });
         }
 
+        const employee = await EmployeeBasic.findById(resolved._id);
         if (!employee) {
             return res.status(404).json({ message: "Employee not found" });
         }
+
+
 
         let documentData = null;
 
@@ -51,11 +54,13 @@ export const addDocument = async (req, res) => {
 
         const newDocument = {
             type,
-            expiryDate,
+            description,
+            expiryDate, // Note: Schema might need update for this, but keeping it for compatibility
             document: documentData,
             createdAt: new Date()
         };
 
+        if (!employee.documents) employee.documents = [];
         employee.documents.push(newDocument);
 
         const updatedEmployee = await employee.save();

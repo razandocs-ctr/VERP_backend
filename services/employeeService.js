@@ -159,6 +159,8 @@ export const getCompleteEmployee = async (id) => {
             documents: basicDocuments ? basicDocuments.map(doc => ({
                 type: doc.type,
                 description: doc.description,
+                expiryDate: doc.expiryDate,
+                createdAt: doc.createdAt,
                 document: doc.document ? {
                     name: doc.document.name,
                     mimeType: doc.document.mimeType,

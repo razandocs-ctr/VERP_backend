@@ -41,6 +41,13 @@ const router = express.Router();
 
 import { getLoanEligibleEmployees } from "../controllers/employee/getLoanEligibleEmployees.js";
 import { requestNotice, updateNoticeStatus } from "../controllers/employee/noticeController.js";
+import { requestLoan } from "../controllers/employee/requestLoan.js";
+import { getLoans } from "../controllers/employee/getLoans.js";
+import { getLoanById } from "../controllers/employee/getLoanById.js";
+import { approveLoan } from "../controllers/employee/approveLoan.js";
+import { updateLoanDetails } from "../controllers/employee/updateLoanDetails.js";
+import { getLoanPdf } from "../controllers/employee/getLoanPdf.js";
+
 
 // All employee routes require authentication
 router.use(protect);
@@ -49,8 +56,21 @@ router.use(protect);
 // Place this BEFORE /:id routes to prevent conflict
 router.get("/loan-eligible", checkPermission('hrm_loan', 'view'), getLoanEligibleEmployees);
 
+import { getDashboardStats } from "../controllers/stats/getDashboardStats.js";
+import { getUserActivityStats } from "../controllers/stats/getUserActivityStats.js";
+import { getHierarchy } from "../controllers/employee/getHierarchy.js";
+
 // Employee list - requires view permission
 router.get("/", checkPermission('hrm_employees_list', 'view'), getEmployees);
+
+// Dashboard Hierarchy - basic access for anyone logged in
+router.get("/dashboard/hierarchy", getHierarchy);
+
+// Dashboard Stats - requires view permission (General HR view)
+router.get("/dashboard/stats", checkPermission('hrm_employees_list', 'view'), getDashboardStats);
+
+// User Specific Stats - basic access for anyone logged in
+router.get("/dashboard/user-stats", getUserActivityStats);
 
 // Add employee - requires create permission
 router.post("/", checkPermission('hrm_employees_add', 'create'), addEmployee);
@@ -125,6 +145,22 @@ router.post("/:id/request-notice", checkPermission('hrm_employees_view_work', 'e
 
 // Update Notice Status (Approve/Reject) - requires work details edit permission
 router.patch("/:id/update-notice-status", checkPermission('hrm_employees_view_work', 'edit'), updateNoticeStatus);
+
+// Request Loan/Advance - requires view permission (anyone can apply usually, or restricted?)
+// Using 'view' permission on 'hrm_loan' for now as basic access check
+// Request Loan/Advance - requires view permission (anyone can apply usually, or restricted?)
+// Using 'view' permission on 'hrm_loan' for now as basic access check
+// Request Loan/Advance - requires view permission (anyone can apply usually, or restricted?)
+// Using 'view' permission on 'hrm_loan' for now as basic access check
+// Request Loan/Advance - requires view permission (anyone can apply usually, or restricted?)
+router.post("/request-loan", checkPermission('hrm_loan', 'view'), requestLoan);
+// Approve/Reject Loan - requires edit permission
+router.put("/loans/:id/status", checkPermission('hrm_loan', 'edit'), approveLoan);
+router.put("/loans/:id", checkPermission('hrm_loan', 'view'), updateLoanDetails); // Use 'view' permission for user self-edit or specific check? logic inside
+router.get("/loans/:id/pdf", checkPermission('hrm_loan', 'view'), getLoanPdf); // New PDF Download Route
+router.get("/loans", checkPermission('hrm_loan', 'view'), getLoans);
+router.get("/loans/:id", checkPermission('hrm_loan', 'view'), getLoanById);
+
 
 // Get specific document - requires view permission
 router.get("/:id/document", checkPermission('hrm_employees_view', 'view'), getEmployeeDocument);

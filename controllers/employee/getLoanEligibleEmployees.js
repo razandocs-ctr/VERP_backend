@@ -22,10 +22,10 @@ export const getLoanEligibleEmployees = async (req, res) => {
             'employeeId totalSalary monthlySalary'
         ).lean();
 
-        // Fetch Visas (Employment Visa Expiry)
+        // Fetch Visas (Employment, Spouse, Visit)
         const visas = await EmployeeVisa.find(
             { employeeId: { $in: employeeIds } },
-            'employeeId employment.expiryDate'
+            'employeeId employment.expiryDate spouse.expiryDate visit.expiryDate'
         ).lean();
 
         // Map data for quick lookup
@@ -35,17 +35,27 @@ export const getLoanEligibleEmployees = async (req, res) => {
         }, {});
 
         const visaMap = visas.reduce((acc, curr) => {
-            acc[curr.employeeId] = curr.employment?.expiryDate || null;
+            if (curr.employment?.expiryDate) {
+                acc[curr.employeeId] = { type: 'Employment', expiry: curr.employment.expiryDate };
+            } else if (curr.spouse?.expiryDate) {
+                acc[curr.employeeId] = { type: 'Spouse', expiry: curr.spouse.expiryDate };
+            } else if (curr.visit?.expiryDate) {
+                acc[curr.employeeId] = { type: 'Visit', expiry: curr.visit.expiryDate };
+            } else {
+                acc[curr.employeeId] = { type: null, expiry: null };
+            }
             return acc;
         }, {});
 
         // Merge data
         const eligibleEmployees = employees.map(emp => ({
             employeeId: emp.employeeId,
+            employeeObjectId: emp._id,
             name: `${emp.firstName} ${emp.lastName}`,
             status: emp.status, // Probation, Permanent, Notice
             salary: salaryMap[emp.employeeId] || 0,
-            visaExpiry: visaMap[emp.employeeId],
+            visaExpiry: visaMap[emp.employeeId]?.expiry || null,
+            visaType: visaMap[emp.employeeId]?.type || null,
         }));
 
         res.status(200).json({ employees: eligibleEmployees });

@@ -1,6 +1,7 @@
 import Group from "../../models/Group.js";
 import User from "../../models/User.js";
 import { isUserAdministrator, getAllPermissions } from "../../services/permissionService.js";
+import { escapeRegex } from "../../utils/regexHelper.js";
 
 // Create new group
 export const createGroup = async (req, res) => {
@@ -21,15 +22,15 @@ export const createGroup = async (req, res) => {
             // Only admin users can create Admin group
             const isAdmin = await isUserAdministrator(userId);
             if (!isAdmin) {
-                return res.status(403).json({ 
-                    message: "Only administrators can create the Admin group." 
+                return res.status(403).json({
+                    message: "Only administrators can create the Admin group."
                 });
             }
         }
 
         // Check if group name already exists
         const existingGroup = await Group.findOne({
-            name: { $regex: new RegExp(`^${normalizedName}$`, 'i') }
+            name: { $regex: new RegExp(`^${escapeRegex(normalizedName)}$`, 'i') }
         });
         if (existingGroup) {
             return res.status(400).json({ message: "Group name already exists" });
@@ -77,7 +78,7 @@ export const createGroup = async (req, res) => {
         // Create group with permissions as Map
         // If creating Admin group, mark it as system group and give it all permissions
         const groupPermissions = isAdminGroup ? getAllPermissions() : (permissions || {});
-        
+
         const newGroup = new Group({
             name: name.trim(),
             users: normalizedUsers,

@@ -79,19 +79,12 @@ export const addEmployee = async (req, res) => {
         // Check for empty strings, null, undefined, or whitespace-only strings
         const isEmpty = (val) => !val || (typeof val === 'string' && val.trim() === '');
         // Only keep the minimal must-have fields to align with the simplified form
-        if (isEmpty(firstName) || isEmpty(lastName) || isEmpty(employeeId)) {
+        // Validate required fields and types
+        if (typeof firstName !== 'string' || !firstName.trim() ||
+            typeof lastName !== 'string' || !lastName.trim() ||
+            typeof employeeId !== 'string' || !employeeId.trim()) {
             return res.status(400).json({
-                message: "Please fill all required fields (Basic Details)",
-                missingFields: {
-                    firstName: isEmpty(firstName),
-                    lastName: isEmpty(lastName),
-                    employeeId: isEmpty(employeeId)
-                },
-                receivedData: {
-                    firstName: firstName || '(empty)',
-                    lastName: lastName || '(empty)',
-                    employeeId: employeeId || '(empty)'
-                }
+                message: "First Name, Last Name, and Employee ID are required and must be valid strings"
             });
         }
 
@@ -136,7 +129,7 @@ export const addEmployee = async (req, res) => {
         const vehicleAllowance = additionalAllowances?.find(a => a.type?.toLowerCase().includes('vehicle'))?.amount
             ? parseFloat(additionalAllowances.find(a => a.type?.toLowerCase().includes('vehicle')).amount)
             : 0;
-        
+
         // Extract fuel allowance from additionalAllowances
         const fuelAllowance = additionalAllowances?.find(a => a.type?.toLowerCase().includes('fuel'))?.amount
             ? parseFloat(additionalAllowances.find(a => a.type?.toLowerCase().includes('fuel')).amount)
@@ -224,7 +217,7 @@ export const addEmployee = async (req, res) => {
         ]);
 
         // If department is "administrator" or "administration", automatically create a user with full permissions
-        if (department && (department.toLowerCase() === 'administrator' || department.toLowerCase() === 'administration') && email) {
+        if (department && typeof department === 'string' && (department.toLowerCase() === 'administrator' || department.toLowerCase() === 'administration') && email) {
             try {
                 // Check if user already exists for this employee
                 const existingUser = await User.findOne({
@@ -257,8 +250,9 @@ export const addEmployee = async (req, res) => {
                     }
 
                     // Generate a default password (can be changed later)
-                    // Format: admin@123
-                    const defaultPassword = 'admin@123';
+                    // Generate a random string as fallback instead of hardcoded password
+                    const randomString = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+                    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || `AutoGen${randomString}!`;
 
                     // Hash password
                     const hashedPassword = await bcrypt.hash(defaultPassword, 10);

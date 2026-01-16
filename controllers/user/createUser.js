@@ -18,10 +18,13 @@ export const createUser = async (req, res) => {
             isAdmin = false
         } = req.body;
 
-        // Validate required fields
-        if (!username || !name || !email || !password) {
+        // Validate required fields and types
+        if (typeof username !== 'string' || !username.trim() ||
+            typeof name !== 'string' || !name.trim() ||
+            typeof email !== 'string' || !email.trim() ||
+            typeof password !== 'string' || !password) {
             return res.status(400).json({
-                message: "Username, name, email, and password are required"
+                message: "Username, name, email, and password are required strings"
             });
         }
 

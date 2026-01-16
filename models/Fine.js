@@ -57,7 +57,7 @@ const fineSchema = new mongoose.Schema(
             },
             approvalStatus: {
                 type: String,
-                enum: ['Pending', 'Approved', 'Rejected'],
+                enum: ['Pending', 'Pending Authorization', 'Approved', 'Rejected'],
                 default: 'Pending'
             },
             approvedBy: {
@@ -96,7 +96,7 @@ const fineSchema = new mongoose.Schema(
         fineStatus: {
             type: String,
             required: true,
-            enum: ['Pending', 'Approved', 'Active', 'Completed', 'Cancelled'],
+            enum: ['Pending', 'Pending Authorization', 'Approved', 'Active', 'Completed', 'Cancelled'],
             default: 'Pending'
         },
         fineAmount: {

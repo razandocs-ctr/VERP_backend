@@ -1,7 +1,7 @@
 import User from "../../models/User.js";
 import Group from "../../models/Group.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
-
+import { escapeRegex } from "../../utils/regexHelper.js";
 // Get all users with optional filters and pagination
 export const getUsers = async (req, res) => {
     try {
@@ -22,7 +22,7 @@ export const getUsers = async (req, res) => {
         }
 
         if (search) {
-            const regex = new RegExp(search, 'i');
+            const regex = new RegExp(escapeRegex(search), 'i');
             filters.$or = [
                 { name: regex },
                 { email: regex },

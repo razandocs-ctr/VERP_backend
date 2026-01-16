@@ -1,6 +1,9 @@
 import Fine from "../../models/Fine.js";
 import EmployeeBasic from "../../models/EmployeeBasic.js";
 import { sendFineConfirmedEmail } from "../../utils/sendFineConfirmedEmail.js";
+import { getManagementHOD } from "../../utils/getManagementHOD.js";
+import { sendHODAuthorizationEmail } from "../../utils/sendHODAuthorizationEmail.js";
+import { isValidStorageUrl } from "../../utils/validationHelper.js";
 
 /**
  * Approve Fine for Specific Employees
@@ -80,56 +83,126 @@ export const approveFine = async (req, res) => {
             // Find full details
             const fullEmp = fullAssigned.find(fe => fe.employeeId === assigned.employeeId);
 
-            // Check if actionable (Pending)
-            if (assigned.approvalStatus === 'Pending') {
-                let canApprove = false;
+            // Check if actionable (Pending or Pending Authorization)
+            // 'Pending Authorization' means Reportee approved, waiting for HOD.
+            const currentStatus = assigned.approvalStatus;
 
+            if (currentStatus === 'Pending' || currentStatus === 'Pending Authorization') {
+                let actionTaken = false;
+
+                // Identification Logic
+                // 1. Is Admin? -> Can do anything.
+                // 2. Is Reportee? -> Can move Pending -> Pending Authorization
+                // 3. Is HOD? -> Can move Pending Authorization -> Approved (or Pending -> Approved if direct)
+
+                // Check Admin
                 if (managerBasic.isAdmin) {
-                    canApprove = true;
-                } else if (fullEmp && fullEmp.primaryReportee) {
-                    // Check if Manager Matches
-                    // Case A: primaryReportee is populated Object -> check _id or companyEmail
-                    // Case B: primaryReportee is ID -> check _id
-
-                    const pRep = fullEmp.primaryReportee;
-                    const pRepId = pRep._id ? pRep._id.toString() : pRep.toString();
-                    const managerId = managerBasic._id.toString();
-
-                    if (pRepId === managerId) {
-                        canApprove = true;
-                    }
-                }
-
-                if (canApprove) {
                     assigned.approvalStatus = 'Approved';
                     assigned.approvedBy = req.user._id;
                     assigned.approvedAt = new Date();
+                    actionTaken = true;
                     modified = true;
-                }
-            }
+                } else {
+                    // Check CEO Validity (Strict HOD)
+                    const isCEO = managerBasic.department && managerBasic.department.toLowerCase() === 'management' &&
+                        ['ceo', 'c.e.o', 'c.e.o.', 'director', 'managing director', 'general manager'].includes(managerBasic.designation?.toLowerCase());
 
-            // Check if STILL pending (after potential approval)
-            if (assigned.approvalStatus !== 'Approved') {
-                allApproved = false;
+                    // Check Reportee Match
+                    let isReporteeManager = false;
+                    if (fullEmp && fullEmp.primaryReportee) {
+                        const pRep = fullEmp.primaryReportee;
+                        const pRepId = pRep._id ? pRep._id.toString() : pRep.toString();
+                        if (pRepId === managerBasic._id.toString()) {
+                            isReporteeManager = true;
+                        }
+                    }
+
+                    // Logic Application: Force 2-Stage Flow
+                    if (isCEO) {
+                        // Stage 2: CEO can approve "Pending Authorization" items
+                        if (currentStatus === 'Pending Authorization') {
+                            assigned.approvalStatus = 'Approved';
+                            assigned.approvedBy = req.user._id;
+                            assigned.approvedAt = new Date();
+                            actionTaken = true;
+                            modified = true;
+                        } else if (currentStatus === 'Pending' && isReporteeManager) {
+                            // EDGE CASE: If CEO happens to be the Reportee Manager too
+                            // They can technically fast-track? Or logic forces flow?
+                            // User request: "Reportee -> Pending Auth -> CEO -> Approved"
+                            // If CEO IS the reportee, they are doing Stage 1.
+                            // But since they are CEO, they can arguably do Stage 2 immediately or implicitly.
+                            // Let's allow CEO to full approve direct reportees for efficiency?
+                            // OR strictly follow: 
+                            // If I am CEO and it's Pending, I am acting as Reportee -> Pending Auth.
+                            // Then I see it's Pending Auth and I am CEO -> I can Approve.
+                            // Let's do instant approval for CEO to avoid double-clicking.
+                            assigned.approvalStatus = 'Approved';
+                            assigned.approvedBy = req.user._id;
+                            assigned.approvedAt = new Date();
+                            actionTaken = true;
+                            modified = true;
+                        }
+                    } else if (isReporteeManager) {
+                        // Stage 1: Reportee Manager moves 'Pending' -> 'Pending Authorization'
+                        if (currentStatus === 'Pending') {
+                            assigned.approvalStatus = 'Pending Authorization';
+                            actionTaken = true;
+                            modified = true;
+                        }
+                    }
+                }
             }
         }
 
         if (!modified) {
-            return res.status(400).json({ message: "No pending approvals found for your reportees." });
+            return res.status(400).json({ message: "No actionable fines found for your role." });
         }
 
-        // 4. Update Main Status if All Approved
-        if (allApproved) {
+        // 4. Post-Loop Actions (Emails & Main Status)
+
+        // A. Check for "Pending Authorization" transition
+        const allProcessed = fine.assignedEmployees.every(e => e.approvalStatus !== 'Pending');
+        const allApprovedByManagers = fine.assignedEmployees.every(e => e.approvalStatus === 'Approved');
+        const hasAuthorizationNeeded = fine.assignedEmployees.some(e => e.approvalStatus === 'Pending Authorization');
+
+        // B. Update Main Status
+        if (allApprovedByManagers) {
             fine.fineStatus = 'Approved';
-            fine.approvedBy = req.user._id; // Last approver (or sets it generally)
+            fine.approvedBy = req.user._id;
             fine.approvedDate = new Date();
 
             // Send Confirmation Email to Employees
             try {
-                // We pass fine and the list of assigned employees
-                await sendFineConfirmedEmail(fine, fine.assignedEmployees);
+                if (fine.attachment && fine.attachment.url) {
+                    if (!isValidStorageUrl(fine.attachment.url)) {
+                        console.warn('Skipping email due to invalid attachment URL hostname');
+                        // Continue without email to prevent SSRF
+                    } else {
+                        await sendFineConfirmedEmail(fine, fine.assignedEmployees);
+                    }
+                } else {
+                    await sendFineConfirmedEmail(fine, fine.assignedEmployees);
+                }
             } catch (emailErr) {
                 console.error("Failed to trigger confirmation email:", emailErr);
+            }
+        } else if (allProcessed && hasAuthorizationNeeded) {
+            // All managers have acted, and at least one requires CEO authorization
+            const wasAlreadyAuthorized = fine.fineStatus === 'Pending Authorization';
+            fine.fineStatus = 'Pending Authorization';
+
+            // C. Notify CEO ONLY if it just transitioned to Pending Authorization OR if forcefully needed
+            // To avoid spamming, we could check if status changed, but here we'll ensure it triggers.
+            if (!wasAlreadyAuthorized) {
+                const hod = await getManagementHOD();
+                if (hod) {
+                    console.log('[ApproveFine] Transitioning to Pending Authorization. Notifying CEO...');
+                    await sendHODAuthorizationEmail('Fine', fine, hod, {
+                        name: `${managerBasic.firstName || 'Manager'} ${managerBasic.lastName || ''}`.trim(),
+                        designation: managerBasic.designation
+                    });
+                }
             }
         }
 

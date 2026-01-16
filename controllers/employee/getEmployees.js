@@ -2,6 +2,7 @@ import EmployeeBasic from "../../models/EmployeeBasic.js";
 import EmployeeVisa from "../../models/EmployeeVisa.js";
 import mongoose from "mongoose";
 import { getSignedFileUrl } from "../../utils/s3Upload.js";
+import { escapeRegex } from "../../utils/regexHelper.js";
 
 // Get all employees (lightweight list response with optional pagination)
 export const getEmployees = async (req, res) => {
@@ -36,7 +37,7 @@ export const getEmployees = async (req, res) => {
         if (status) filters.status = status;
         if (profileStatus) filters.profileStatus = profileStatus;
         if (search) {
-            const regex = new RegExp(search, 'i');
+            const regex = new RegExp(escapeRegex(search), 'i');
             filters.$or = [
                 { firstName: regex },
                 { lastName: regex },

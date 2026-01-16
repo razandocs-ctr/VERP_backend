@@ -16,6 +16,7 @@ dotenv.config();
 connectDB(); // <-- Call DB connection
 
 const app = express();
+app.disable("x-powered-by");
 
 // Enable compression for all responses (reduces payload size by ~70-90%)
 app.use(compression({

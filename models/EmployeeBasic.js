@@ -56,6 +56,8 @@ const employeeBasicSchema = new mongoose.Schema(
             {
                 type: { type: String },
                 description: { type: String },
+                expiryDate: { type: Date },
+                createdAt: { type: Date, default: Date.now },
                 document: {
                     url: { type: String }, // Cloudinary URL (preferred)
                     data: { type: String }, // Base64 data (legacy/fallback)
